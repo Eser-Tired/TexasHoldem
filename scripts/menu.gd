@@ -6,7 +6,7 @@ const MUTED = Color("8aa4a5")
 const GREEN = Color("8cd6b4")
 const GAME_SCENE = preload("res://scenes/main.tscn")
 
-var font: SystemFont
+var font: Font
 var name_input: LineEdit
 var ip_input: LineEdit
 var port_input: SpinBox
@@ -20,8 +20,8 @@ var address_label: Label
 var game: Control
 
 func _ready() -> void:
-	font = SystemFont.new()
-	font.font_names = PackedStringArray(["Microsoft YaHei", "Noto Sans CJK SC", "sans-serif"])
+	get_tree().quit_on_go_back = false
+	font = GameFonts.ui()
 	var palette = Theme.new()
 	palette.default_font = font
 	palette.default_font_size = 18
@@ -278,6 +278,11 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		var full = DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED if full else DisplayServer.WINDOW_MODE_FULLSCREEN)
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST and game == null and is_node_ready():
+		if LanRoom.phase in ["connecting", "lobby"]:
+			LanRoom.leave_room()
 
 func _snapshot() -> void:
 	await get_tree().create_timer(0.5).timeout

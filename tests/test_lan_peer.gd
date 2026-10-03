@@ -17,6 +17,7 @@ var ready_sent = false
 var leave_at = -1.0
 var close_at = -1.0
 var elapsed = 0.0
+var saw_exact_amount = false
 
 func _initialize() -> void:
 	for arg in OS.get_cmdline_user_args():
@@ -76,6 +77,8 @@ func run() -> void:
 					ready_sent = true
 		elif room.phase == "playing":
 			var view = room.view
+			if view.hand_number == 1 and view.street == 0 and view.current_bet == 137:
+				saw_exact_amount = true
 			check(menu.game != null and menu.game.online, "Actual UI enters online game")
 			check(view.players.size() == count, "Actual player count in network view")
 			check(view.players[0].name == ("Host" if host else "Client%d" % client_index), "Personal seat maps to this peer")
@@ -100,6 +103,7 @@ func run() -> void:
 				room._action.rpc_id(1, "raise", 2147483647, view.revision, view.hand_number)
 				forged_once = true
 			if view.finished:
+				check(saw_exact_amount, "Exact 137-chip wager reached this peer without rounding")
 				finished_hands[view.hand_number] = true
 				var total = 0
 				for p in view.players:
@@ -127,6 +131,11 @@ func run() -> void:
 						menu.game.fold_button.pressed.emit()
 					elif view.hand_number == 3 and view.can_raise(0):
 						menu.game.allin_button.pressed.emit()
+					elif view.hand_number == 1 and view.street == 0 and view.current_bet == 20 and view.can_raise(0):
+						menu.game.amount_input.text = "137"
+						menu.game.amount_input.text_changed.emit("137")
+						check(not menu.game.raise_button.disabled, "Exact integer amount accepted by network UI")
+						menu.game.raise_button.pressed.emit()
 					else:
 						menu.game.call_button.pressed.emit()
 		elif room.phase == "menu" and finished_hands.size() >= 3:

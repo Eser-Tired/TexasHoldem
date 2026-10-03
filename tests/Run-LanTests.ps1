@@ -18,6 +18,8 @@ foreach ($playerCount in $PlayerCounts) {
             $errorPath = Join-Path $resultDirectory "lan-$playerCount-$index.err.log"
             $arguments = @('--headless', '--path', ('"' + $projectDirectory + '"'), '--script', 'res://tests/test_lan_peer.gd', '--', "--role=$role", "--count=$playerCount", "--port=$roomPort", "--client=$index")
             $process = Start-Process -FilePath $godotExecutable -ArgumentList $arguments -WindowStyle Hidden -RedirectStandardOutput $outputPath -RedirectStandardError $errorPath -PassThru
+            # Retain the native handle so Windows PowerShell 5 can read ExitCode after HasExited.
+            $null = $process.Handle
             $processes += @{ Process = $process; Output = $outputPath; Error = $errorPath }
             if ($index -eq 0) { Start-Sleep -Milliseconds 700 }
         }

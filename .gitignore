@@ -1,3 +1,9 @@
 .godot/
 *.tmp
 test-results/
+.private/
+build/
+*.apk
+*.aab
+*.keystore
+*.jks

@@ -12,9 +12,9 @@ const SEATS = [Vector2(410, 682), Vector2(50, 347), Vector2(434, 110), Vector2(8
 var table
 var online = false
 var restart_button: Button
-var ui_font: SystemFont
-var card_font: SystemFont
-var symbol_font: SystemFont
+var ui_font: Font
+var card_font: Font
+var symbol_font: Font
 var fold_button: Button
 var call_button: Button
 var raise_button: Button
@@ -23,6 +23,9 @@ var next_button: Button
 var reset_button: Button
 var sound_button: Button
 var slider: HSlider
+var amount_input: LineEdit
+var syncing_amount = false
+var touch_layout = false
 var quick_buttons: Array[Button] = []
 var rules_panel: Panel
 var result_panel: Panel
@@ -39,12 +42,15 @@ var pulse = 0.0
 
 func _ready() -> void:
 	online = LanRoom.phase == "playing" and LanRoom.view != null
-	ui_font = SystemFont.new()
-	ui_font.font_names = PackedStringArray(["Microsoft YaHei", "Noto Sans CJK SC", "sans-serif"])
-	card_font = SystemFont.new()
-	card_font.font_names = PackedStringArray(["Georgia", "DejaVu Serif", "serif"])
-	symbol_font = SystemFont.new()
-	symbol_font.font_names = PackedStringArray(["Segoe UI Symbol", "DejaVu Sans", "sans-serif"])
+	touch_layout = OS.has_feature("mobile") or "--touch-layout" in OS.get_cmdline_user_args()
+	ui_font = GameFonts.ui()
+	if OS.has_feature("mobile"):
+		card_font = ui_font
+	else:
+		var serif = SystemFont.new()
+		serif.font_names = PackedStringArray(["Georgia", "DejaVu Serif", "serif"])
+		card_font = serif
+	symbol_font = ui_font
 	var theme_resource = Theme.new()
 	theme_resource.default_font = ui_font
 	theme_resource.default_font_size = 17
@@ -112,7 +118,7 @@ func _build_controls() -> void:
 		sound_button.text = "声音 · 开" if sound_enabled else "声音 · 关")
 	fold_button = _button("弃牌  F", Rect2(266, 808, 122, 52), func(): _player_action("fold"))
 	call_button = _button("过牌  SPACE", Rect2(398, 808, 157, 52), func(): _player_action("call"), true)
-	raise_button = _button("加注  R", Rect2(565, 808, 157, 52), func(): _player_action("raise", int(slider.value)))
+	raise_button = _button("加注" if touch_layout else "加注  R", Rect2(565, 808, 157, 52), _raise_from_input)
 	allin_button = _button("全下", Rect2(732, 808, 112, 52), _all_in)
 	next_button = _button("下一手  →", Rect2(846, 808, 196, 52), _next_hand, true)
 	reset_button = _button("再玩一局", Rect2(1054, 808, 196, 52), _reset_match)
@@ -129,11 +135,38 @@ func _build_controls() -> void:
 	slider.add_theme_stylebox_override("slider", rail)
 	slider.add_theme_stylebox_override("grabber_area", fill)
 	slider.add_theme_stylebox_override("grabber_area_highlight", fill)
-	slider.value_changed.connect(func(_v): queue_redraw())
+	slider.value_changed.connect(_slider_amount_changed)
 	add_child(slider)
+	amount_input = LineEdit.new()
+	amount_input.position = Vector2(965, 798)
+	amount_input.size = Vector2(192, 38)
+	amount_input.max_length = 9
+	amount_input.alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	amount_input.select_all_on_focus = true
+	amount_input.placeholder_text = "输入筹码"
+	amount_input.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER
+	amount_input.add_theme_stylebox_override("normal", _style(Color("0c222a"), Color("456368"), 8))
+	amount_input.add_theme_stylebox_override("focus", _style(Color("15343b"), GOLD, 8))
+	amount_input.add_theme_stylebox_override("read_only", _style(Color("10252b"), Color("294047"), 8))
+	amount_input.add_theme_color_override("font_color", GOLD)
+	amount_input.add_theme_color_override("font_uneditable_color", MUTED)
+	amount_input.add_theme_constant_override("outline_size", 0)
+	amount_input.text_changed.connect(_amount_edited)
+	amount_input.text_submitted.connect(_confirm_amount)
+	amount_input.focus_exited.connect(func():
+		position.y = 0
+		DisplayServer.virtual_keyboard_hide())
+	add_child(amount_input)
 	for i in range(3):
 		var index = i
 		quick_buttons.append(_button(["最小", "½ 池", "满池"][i], Rect2(1182 + i * 70, 819, 62, 34), func(): _quick_raise(index)))
+	if touch_layout:
+		for button in [fold_button, call_button, raise_button, allin_button, next_button, reset_button]:
+			button.position.y = 789
+			button.size.y = 79
+		fold_button.text = "弃牌"
+		amount_input.position = Vector2(1034, 797)
+		amount_input.size = Vector2(343, 65)
 	status_label = Label.new()
 	status_label.position = Vector2(282, 495)
 	status_label.size = Vector2(556, 32)
@@ -164,18 +197,20 @@ func _build_rules() -> void:
 	rules_panel.add_theme_stylebox_override("panel", _style(Color("10292f"), GOLD, 22))
 	add_child(rules_panel)
 	var heading = Label.new()
-	heading.text = "牌桌指南"
+	heading.text = "牌桌指南 · 可滚动阅读"
 	heading.position = Vector2(38, 24)
 	heading.add_theme_font_size_override("font_size", 28)
 	heading.add_theme_color_override("font_color", GOLD)
 	rules_panel.add_child(heading)
-	var body = Label.new()
+	var body = RichTextLabel.new()
 	body.position = Vector2(38, 91)
 	body.size = Vector2(845, 460)
-	body.add_theme_font_size_override("font_size", 19)
-	body.add_theme_color_override("font_color", INK)
+	body.scroll_active = true
+	body.selection_enabled = true
+	body.add_theme_font_size_override("normal_font_size", 19)
+	body.add_theme_color_override("default_color", INK)
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	body.text = "每人初始 1,000 筹码，小盲 10 / 大盲 20。局域网房间支持 2–4 人；所有人准备后由房主开局、开始下一手或重置筹码。出局后可以继续观看。\n\n每手发两张底牌，依次进行翻牌前、翻牌（3 张）、转牌（1 张）、河牌（1 张）四轮下注。用你的底牌和公共牌中的任意五张，组成最强牌型。\n\n轮到你时：弃牌退出本手；过牌无需投入；跟注补齐差额；加注把本轮总下注提高到指定金额；全下投入剩余筹码。滑块与快捷按钮设置的是本轮下注总额。\n\n不足最小加注的全下，不会单独重新开放已行动玩家的加注权。边池分别结算，同分平分底池。多出的零头按庄家左侧顺序分配。\n\n牌型从强到弱：同花顺 > 四条 > 葫芦 > 同花 > 顺子 > 三条 > 两对 > 一对 > 高牌。A 可组成 A2345 的最小顺子。\n\n玩家离线会结束当前对局并返回房间，重新准备开局。房主离开会关闭房间。\n\n空格 跟注/过牌/下一手 · F 弃牌 · R 加注 · F11 全屏 · Esc 关闭指南。"
+	body.text = "每人初始 1,000 筹码，小盲 10 / 大盲 20。局域网支持 2–4 人；全部准备后由房主开局、开始下一手或重置筹码。出局后可以观看。\n\n每手两张底牌，依次进行翻牌前、翻牌（3 张）、转牌、河牌四轮下注。从底牌与公共牌中任选五张组成最强牌型。\n\n弃牌退出本手；过牌无需投入；跟注补齐差额；全下投入剩余筹码。加注金额可直接输入整数，回车确认数值，再点击加注。金额是本轮下注总额，例如已下注 20，输入 125，加注后本轮总共投入 125（再扣 105）。桌面端也可用滑块与快捷按钮。\n\n不足最小加注的全下，不会单独重新开放已行动玩家的加注权。边池分别结算，同分平分，多出的零头按庄家左侧顺序分配。\n\n同花顺 > 四条 > 葫芦 > 同花 > 顺子 > 三条 > 两对 > 一对 > 高牌。A 可组成 A2345 最小顺子。\n\n玩家离线会结束本局并返回房间，重新准备开局；房主离开则关闭房间。\n\n空格 跟注/过牌/下一手 · F 弃牌 · R 加注 · F11 全屏 · Esc 关闭指南。输入金额时不触发下注快捷键。"
 	rules_panel.add_child(body)
 	var close_button = _button("回到牌桌", Rect2(630, 691, 180, 48), func(): rules_panel.hide(), true)
 	remove_child(close_button)
@@ -248,6 +283,60 @@ func _quick_raise(index: int) -> void:
 	if index > 0:
 		target = table.current_bet + maxi(table.min_raise, int((table.pot() + table.to_call(0)) * (0.5 if index == 1 else 1.0)))
 	slider.value = clampi(target, int(slider.min_value), int(slider.max_value))
+	_slider_amount_changed(slider.value)
+
+func _amount_error() -> String:
+	var text = amount_input.text.strip_edges()
+	if text.is_empty() or not text.is_valid_int() or text.begins_with("-") or text.begins_with("+"):
+		return "请输入整数筹码。"
+	var value = int(text)
+	var minimum = mini(table.current_bet + table.min_raise, table.max_total(0))
+	if value < minimum or value <= table.current_bet:
+		return "最小加注总额为 %d 筹码。" % minimum
+	if value > table.max_total(0):
+		return "本轮最多可下注 %d 筹码。" % table.max_total(0)
+	return ""
+
+func _slider_amount_changed(value: float) -> void:
+	if not syncing_amount and amount_input != null:
+		amount_input.text = str(int(value))
+		if table != null:
+			_amount_edited(amount_input.text)
+	queue_redraw()
+
+func _amount_edited(_text: String) -> void:
+	if syncing_amount or table == null:
+		return
+	var error = _amount_error()
+	var allowed = table.can_raise(0) and (not online or not LanRoom.action_pending)
+	raise_button.disabled = not allowed or not error.is_empty()
+	if allowed:
+		if error.is_empty():
+			syncing_amount = true
+			slider.value = int(amount_input.text.strip_edges())
+			syncing_amount = false
+			status_label.text = "加注总额 %d · 点击加注执行" % int(slider.value)
+		else:
+			status_label.text = error
+	queue_redraw()
+
+func _confirm_amount(_text: String) -> void:
+	if _amount_error().is_empty():
+		amount_input.text = str(int(amount_input.text.strip_edges()))
+		amount_input.release_focus()
+	else:
+		status_label.text = _amount_error()
+
+func _raise_from_input() -> void:
+	if table.actor != 0 or _modal_open():
+		return
+	var error = _amount_error()
+	if not error.is_empty():
+		status_label.text = error
+		return
+	var target = int(amount_input.text.strip_edges())
+	amount_input.release_focus()
+	_player_action("raise", target)
 
 func _all_in() -> void:
 	if table.actor != 0 or _modal_open():
@@ -280,7 +369,7 @@ func _table_changed() -> void:
 	raise_button.disabled = not raising
 	allin_button.disabled = not your_turn or (table.max_total(0) > table.current_bet and not raising)
 	var call_amount = mini(table.to_call(0), table.players[0].stack)
-	call_button.text = "过牌  SPACE" if call_amount == 0 else "跟注 %d" % call_amount
+	call_button.text = ("过牌" if touch_layout else "过牌  SPACE") if call_amount == 0 else "跟注 %d" % call_amount
 	if your_turn and call_amount == table.players[0].stack and call_amount > 0:
 		call_button.text = "跟注全下 %d" % call_amount
 	next_button.visible = table.finished
@@ -289,14 +378,21 @@ func _table_changed() -> void:
 	if next_button.disabled:
 		next_button.text = "等待房主开始"
 	reset_button.visible = table.finished and not table.match_over() and (not online or LanRoom.is_host)
-	slider.visible = not table.finished
+	slider.visible = not table.finished and not touch_layout
 	slider.editable = raising
+	amount_input.visible = not table.finished
+	amount_input.editable = raising
+	if not raising and amount_input.has_focus():
+		amount_input.release_focus()
+	syncing_amount = true
 	slider.step = 1
 	slider.min_value = mini(table.current_bet + table.min_raise, table.max_total(0))
 	slider.max_value = maxi(slider.min_value, table.max_total(0))
 	slider.value = slider.min_value
+	amount_input.text = str(int(slider.min_value))
+	syncing_amount = false
 	for b in quick_buttons:
-		b.visible = not table.finished
+		b.visible = not table.finished and not touch_layout
 		b.disabled = not raising
 	result_panel.visible = table.finished
 	result_label.text = table.result_text
@@ -317,6 +413,10 @@ func _table_changed() -> void:
 func _process(delta: float) -> void:
 	pulse += delta
 	deal_progress = minf(1.0, deal_progress + delta * 3.0)
+	if OS.has_feature("mobile"):
+		var keyboard_height = DisplayServer.virtual_keyboard_get_height() if amount_input.has_focus() else 0
+		var scale_y = maxf(0.01, get_viewport().get_screen_transform().get_scale().y)
+		position.y = -minf(500, keyboard_height / scale_y) if keyboard_height > 0 else 0
 	if not online and table != null and not table.finished and table.actor > 0 and not _modal_open() and not snapshot_mode:
 		ai_wait -= delta
 		if ai_wait <= 0:
@@ -337,8 +437,13 @@ func _input(event: InputEvent) -> void:
 		if rules_panel.visible:
 			get_viewport().set_input_as_handled()
 			rules_panel.hide()
+		elif amount_input.has_focus():
+			get_viewport().set_input_as_handled()
+			amount_input.release_focus()
 		return
 	if _modal_open():
+		return
+	if get_viewport().gui_get_focus_owner() is LineEdit:
 		return
 	if event.keycode in [KEY_SPACE, KEY_F, KEY_R]:
 		get_viewport().set_input_as_handled()
@@ -350,7 +455,16 @@ func _input(event: InputEvent) -> void:
 	elif event.keycode == KEY_F:
 		_player_action("fold")
 	elif event.keycode == KEY_R:
-		_player_action("raise", int(slider.value))
+		_raise_from_input()
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST and is_node_ready():
+		if rules_panel.visible:
+			rules_panel.hide()
+		elif amount_input.has_focus():
+			amount_input.release_focus()
+		else:
+			_leave_game()
 
 func _play_sound(frequency: float) -> void:
 	if not sound_enabled or snapshot_mode:
@@ -587,7 +701,7 @@ func _draw_actions() -> void:
 	else:
 		_text("轮到你行动" if table.actor == 0 else "等待对手行动", Vector2(56, 823), 18, GOLD if table.actor == 0 else MUTED)
 		_text("需跟注 %d · 已下注 %d" % [table.to_call(0), table.players[0].street_bet], Vector2(56, 850), 13, MUTED)
-		_text("加注至 %d" % int(slider.value), Vector2(882, 824), 15, GOLD if table.can_raise(0) else MUTED)
+		_text("加注总额" if touch_layout else "加注至", Vector2(882, 833 if touch_layout else 824), 15, GOLD if table.can_raise(0) else MUTED)
 
 func _capture_preview() -> void:
 	await get_tree().create_timer(0.55).timeout

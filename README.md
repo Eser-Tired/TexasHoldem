@@ -6,7 +6,15 @@ Godot 4 中文德州扑克小游戏，支持 **2–4 人局域网房间**和单�
 
 ## 开始游戏
 
-各台电脑安装 Godot 4（已验证 4.7.2），下载同一版本的项目。双击 `开始游戏.cmd` 进入大厅。启动器会查找 WinGet 安装路径或 PATH 中的 Godot，先导入项目资源与脚本，再打开游戏；也可直接在 Godot 中导入 `project.godot` 并按 F5 运行。不需要 Python 或插件。
+从 [v1.0.0 Release](https://github.com/Eser-Tired/TexasHoldem/releases/tag/v1.0.0) 下载：
+
+- **Windows x64**：运行 `NightfallPoker-v1.0.0-Windows-x64.exe`，游戏资源已内嵌，无需安装 Godot。
+- **Android 7.0 及以上**（设备支持 OpenGL ES 3.0）：安装 `NightfallPoker-v1.0.0-Android.apk`，横屏游玩。支持 ARM64、ARMv7 和 x86_64，APK 使用正式发布密钥签名。
+- `SHA256SUMS.txt` 提供两个文件的 SHA-256 校验值。
+
+Windows 与安卓可以连接同一局域网房间。所有人使用相同游戏版本。
+
+从源码运行：安装 Godot 4（已验证 4.7.2），下载项目，双击 `开始游戏.cmd`。启动器会查找 WinGet 安装路径或 PATH 中的 Godot，先导入项目资源与脚本，再打开游戏；也可在 Godot 中导入 `project.godot` 并按 F5 运行。不需要 Python 或插件。
 
 编辑项目：双击 `打开编辑器.cmd`，或者在 Godot 项目管理器中导入 `project.godot`，按 F5 运行。
 
@@ -32,10 +40,12 @@ Godot 4 中文德州扑克小游戏，支持 **2–4 人局域网房间**和单�
 ## 操作
 
 - 空格：过牌、跟注；结算后开始下一手（联机时仅房主可操作）。
-- F：弃牌；R：按滑块金额加注。
-- 滑块与「最小 / ½ 池 / 满池」：选择本轮下注总额，点击「加注」执行。
+- F：弃牌；R：按输入框金额加注。
+- **直接输入整数筹码**，点击「加注」执行。回车仅确认数值并收起键盘；不会直接下注。输入时，F / R / 空格不会触发行动。
+- 输入金额是**本轮下注总额**。例如本轮已投入 20，输入 125 后加注，会再扣 105。小于最小加注、超过可用筹码、负数、小数和空值均不会下注。
+- 桌面端的滑块与「最小 / ½ 池 / 满池」会同步到输入框；安卓使用更大的按钮和数字输入框。
 - 全下：投入全部剩余筹码。
-- F11：全屏切换；Esc：关闭玩法说明。
+- F11：全屏切换；Esc：关闭玩法说明或退出金额编辑。安卓返回键关闭说明 / 键盘，或返回大厅。
 - 顶部按钮：查看玩法、开关提示音、重新开局（联机时仅房主可操作）和离开房间 / 返回大厅。
 
 ## 已实现
@@ -62,12 +72,15 @@ Godot 4 中文德州扑克小游戏，支持 **2–4 人局域网房间**和单�
 - `scenes/main.tscn`：主场景。
 - `scenes/menu.tscn`：启动大厅。
 - `tests/test_poker.gd`：已知牌型、600 组七张牌穷举比较、边池、下注边界、500 手随机模拟和 60 手电脑策略对局。
-- `tests/test_ui.gd`：实际场景按钮、键盘焦点、弹窗暂停与全下流程验证。
+- `tests/test_ui.gd`：精确金额、无效输入、滑块 / 快捷金额同步、回车与键盘焦点、场景按钮、弹窗暂停、全下和字体验证。
 - `tests/test_menu.gd`：创建房间按钮、人数选择、错误 IP 与单机入口。
 - `tests/test_lan_rules.gd`：2–4 人规则、座位旋转、底牌隔离与观战。
 - `tests/Run-LanTests.ps1`：多进程真实 ENet 通信，分别验证 2、3、4 人房间。
 - `tests/test_lan_admission.gd`：容量、准备、超时、中途加入、协议版本、重新加入与房主离开。
 - `docs/NETWORKING.md`：联机设计。
+- `export_presets.cfg`：Windows 内嵌资源和 Android 正式 APK 导出配置。
+- `tools/Build-Release.ps1`：导出两个平台、使用私有签名并生成校验值。
+- `docs/BUILDING.md`：导出工具配置与发布密钥管理。
 
 ## 验证
 
@@ -77,10 +90,11 @@ Godot 4 中文德州扑克小游戏，支持 **2–4 人局域网房间**和单�
 godot_console --headless --editor --import --quit --path .
 godot_console --headless --path . --script res://tests/test_poker.gd
 godot_console --headless --path . --script res://tests/test_ui.gd
+godot_console --headless --path . --script res://tests/test_ui.gd -- --touch-layout
 godot_console --headless --path . --script res://tests/test_menu.gd
 godot_console --headless --path . --script res://tests/test_lan_rules.gd
 godot_console --headless --path . --script res://tests/test_lan_admission.gd
 powershell -NoProfile -ExecutionPolicy Bypass -File tests/Run-LanTests.ps1
 ```
 
-没有外部素材或插件依赖；牌桌、扑克牌和图标均随项目提供。中文字体优先使用系统微软雅黑，其他平台可通过 `scripts/main.gd` 中的字体列表替换。
+无需插件；牌桌、扑克牌和图标随项目提供。中文与花色字形使用内置 Noto Sans SC 字体，遵循 [SIL Open Font License](assets/fonts/OFL.txt)，来源为 [Google Fonts](https://github.com/google/fonts/tree/main/ofl/notosanssc)。安装包内包含字体许可文本。
