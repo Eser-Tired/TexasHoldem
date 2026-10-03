@@ -31,16 +31,22 @@ var winning_seats: Array = []
 var last_pot = 0
 var hand_start_stacks: Array = []
 var rng = RandomNumberGenerator.new()
+var player_names: Array = NAMES.duplicate()
+var stop_on_local_bust = true
+var result_details = ""
 
-func _init() -> void:
+func _init(names: Array = NAMES, stop_on_bust: bool = true) -> void:
+	assert(names.size() >= 2 and names.size() <= 4)
+	player_names = names.duplicate()
+	stop_on_local_bust = stop_on_bust
 	rng.randomize()
 	reset_match()
 
 func reset_match() -> void:
 	players.clear()
-	for name in NAMES:
+	for name in player_names:
 		players.append({"name": name, "stack": START_STACK, "hole": [], "folded": false, "in_hand": true, "street_bet": 0, "total_bet": 0, "action": "准备入座"})
-	dealer = 3
+	dealer = players.size() - 1
 	hand_number = 0
 	history.clear()
 	finished = true
@@ -89,7 +95,7 @@ func match_over() -> bool:
 	for p in players:
 		if p.stack > 0:
 			funded += 1
-	return players[0].stack == 0 or funded < 2
+	return (stop_on_local_bust and players[0].stack == 0) or funded < 2
 
 func start_hand() -> void:
 	if not finished or (hand_number > 0 and match_over()):
@@ -123,12 +129,17 @@ func start_hand() -> void:
 	street = 0
 	finished = false
 	showdown = false
-	payouts = [0, 0, 0, 0]
+	payouts = []
+	for _i in players:
+		payouts.append(0)
 	winning_seats.clear()
 	result_text = ""
+	result_details = ""
 	current_bet = BIG_BLIND
 	min_raise = BIG_BLIND
-	acted_at = [-1, -1, -1, -1]
+	acted_at = []
+	for _i in players:
+		acted_at.append(-1)
 	log_line("—— 第 %d 手 · %s 持庄 ——" % [hand_number, players[dealer].name])
 	_commit(small_blind_seat, SMALL_BLIND)
 	players[small_blind_seat].action = "小盲 %d" % players[small_blind_seat].street_bet
@@ -230,7 +241,9 @@ func _deal_next_street() -> void:
 		board.append(deck.pop_back())
 	current_bet = 0
 	min_raise = BIG_BLIND
-	acted_at = [-1, -1, -1, -1]
+	acted_at = []
+	for _i in players:
+		acted_at.append(-1)
 	for p in players:
 		p.street_bet = 0
 		if p.in_hand and not p.folded:
@@ -271,10 +284,48 @@ func _finish(reveal: bool) -> void:
 	var net = players[0].stack - hand_start_stacks[0]
 	result_text = "本手 +%d 筹码" % net if net > 0 else ("本手 %d 筹码" % net if net < 0 else "本手持平")
 	if not details.is_empty():
-		result_text += "  ·  " + details[0]
+		result_details = details[0]
+		result_text += "  ·  " + result_details
 	finished = true
 	actor = -1
 	pending.clear()
+
+# Build a different, redacted view for EACH recipient. No deck/RNG is serialized.
+# Seat zero in the view is always the recipient; other indices rotate clockwise.
+func snapshot_for(viewer: int, revision: int) -> Dictionary:
+	assert(viewer >= 0 and viewer < players.size())
+	var count = players.size()
+	var visible_players: Array = []
+	var starting_stacks: Array = []
+	var visible_winners: Array = []
+	for offset in range(count):
+		var seat = (viewer + offset) % count
+		var p = players[seat].duplicate(true)
+		var reveal = seat == viewer or (finished and showdown and not p.folded)
+		if not reveal and not p.hole.is_empty():
+			p.hole = [-1, -1]
+		visible_players.append(p)
+		starting_stacks.append(hand_start_stacks[seat])
+	for winner in winning_seats:
+		visible_winners.append((winner - viewer + count) % count)
+	var net = players[viewer].stack - hand_start_stacks[viewer]
+	var personal_result = "本手 +%d 筹码" % net if net > 0 else ("本手 %d 筹码" % net if net < 0 else "本手持平")
+	if not result_details.is_empty():
+		personal_result += "  ·  " + result_details
+	return {
+		"revision": revision, "players": visible_players, "board": board.duplicate(),
+		"dealer": (dealer - viewer + count) % count,
+		"small_blind_seat": (small_blind_seat - viewer + count) % count,
+		"big_blind_seat": (big_blind_seat - viewer + count) % count,
+		"actor": (actor - viewer + count) % count if actor >= 0 else -1,
+		"street": street, "hand_number": hand_number,
+		"current_bet": current_bet, "min_raise": min_raise,
+		"finished": finished, "showdown": showdown,
+		"history": history.duplicate(), "result_text": personal_result,
+		"winning_seats": visible_winners, "last_pot": last_pot,
+		"hand_start_stacks": starting_stacks, "can_raise": can_raise(viewer),
+		"match_over": match_over()
+	}
 
 # Opponents sample unknown cards; they never inspect another player's hole cards.
 func estimate_equity(seat: int, samples: int = 24) -> float:

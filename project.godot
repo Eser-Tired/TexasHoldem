@@ -3,9 +3,12 @@ config_version=5
 
 [application]
 config/name="夜色牌局 · 德州扑克"
-run/main_scene="res://scenes/main.tscn"
+run/main_scene="res://scenes/menu.tscn"
 config/features=PackedStringArray("4.4", "GL Compatibility")
 config/icon="res://assets/icon.svg"
+
+[autoload]
+LanRoom="*res://scripts/lan_room.gd"
 
 [display]
 window/size/viewport_width=1440

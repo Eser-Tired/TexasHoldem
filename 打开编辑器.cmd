@@ -1,2 +1,2 @@
 @echo off
-start "" "%LOCALAPPDATA%\Microsoft\WinGet\Links\godot.exe" --editor --path "%~dp0."
+powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0launch.ps1" -Editor

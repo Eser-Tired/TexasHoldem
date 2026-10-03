@@ -1,5 +1,7 @@
 extends Control
 
+signal exit_requested
+
 const INK = Color("e9eee7")
 const MUTED = Color("849d9e")
 const GOLD = Color("d8ba73")
@@ -7,7 +9,9 @@ const GREEN = Color("8cd6b4")
 const BG = Color("09191f")
 const SEATS = [Vector2(410, 682), Vector2(50, 347), Vector2(434, 110), Vector2(858, 347)]
 
-var table: PokerTable
+var table
+var online = false
+var restart_button: Button
 var ui_font: SystemFont
 var card_font: SystemFont
 var symbol_font: SystemFont
@@ -34,6 +38,7 @@ var snapshot_mode = false
 var pulse = 0.0
 
 func _ready() -> void:
+	online = LanRoom.phase == "playing" and LanRoom.view != null
 	ui_font = SystemFont.new()
 	ui_font.font_names = PackedStringArray(["Microsoft YaHei", "Noto Sans CJK SC", "sans-serif"])
 	card_font = SystemFont.new()
@@ -48,11 +53,14 @@ func _ready() -> void:
 	audio_player.volume_db = -19
 	add_child(audio_player)
 	_build_controls()
-	table = PokerTable.new()
+	table = LanRoom.view if online else PokerTable.new()
 	table.changed.connect(_table_changed)
+	if online:
+		LanRoom.input_changed.connect(_table_changed)
+		LanRoom.notice.connect(func(message): status_label.text = message)
 	snapshot_mode = "--snapshot" in OS.get_cmdline_user_args()
 	_table_changed()
-	if snapshot_mode:
+	if snapshot_mode and not online:
 		table.rng.seed = 20261003
 		table.reset_match()
 		if "--snapshot-state=flop" in OS.get_cmdline_user_args():
@@ -63,6 +71,8 @@ func _ready() -> void:
 				table.act("call")
 		elif "--snapshot-state=rules" in OS.get_cmdline_user_args():
 			rules_panel.show()
+		_capture_preview()
+	elif snapshot_mode:
 		_capture_preview()
 
 func _style(color: Color, border: Color = Color.TRANSPARENT, radius: int = 12) -> StyleBoxFlat:
@@ -94,7 +104,9 @@ func _button(text: String, rect: Rect2, callback: Callable, accent: bool = false
 
 func _build_controls() -> void:
 	_button("玩法说明  ?", Rect2(1120, 37, 118, 40), func(): rules_panel.show())
-	_button("重新开局", Rect2(1250, 37, 156, 40), _ask_reset)
+	restart_button = _button("重新开局", Rect2(1250, 37, 156, 40), _ask_reset)
+	restart_button.disabled = online and not LanRoom.is_host
+	_button("离开房间" if online else "返回大厅", Rect2(843, 37, 130, 40), _leave_game)
 	sound_button = _button("声音 · 开", Rect2(987, 37, 118, 40), func():
 		sound_enabled = not sound_enabled
 		sound_button.text = "声音 · 开" if sound_enabled else "声音 · 关")
@@ -163,7 +175,7 @@ func _build_rules() -> void:
 	body.add_theme_font_size_override("font_size", 19)
 	body.add_theme_color_override("font_color", INK)
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	body.text = "每人初始 1,000 筹码，小盲 10 / 大盲 20。击败三位对手，赢下牌桌。\n\n每手发两张底牌，依次进行翻牌前、翻牌（3 张）、转牌（1 张）、河牌（1 张）四轮下注。用你的底牌和公共牌中的任意五张，组成最强牌型。\n\n轮到你时：弃牌退出本手；过牌无需投入；跟注补齐差额；加注把本轮总下注提高到指定金额；全下投入剩余筹码。滑块与快捷按钮设置的是本轮下注总额。\n\n不足最小加注的全下，不会单独重新开放已行动玩家的加注权。全下产生的边池分别结算；同牌型比较踢脚牌，同分平分底池。多出的零头按庄家左侧顺序分配。\n\n牌型从强到弱：同花顺 > 四条 > 葫芦 > 同花 > 顺子 > 三条 > 两对 > 一对 > 高牌。A 可组成 A2345 的最小顺子。\n\n快捷键：空格 跟注/过牌/下一手 · F 弃牌 · R 加注 · F11 全屏 · Esc 关闭指南。"
+	body.text = "每人初始 1,000 筹码，小盲 10 / 大盲 20。局域网房间支持 2–4 人；所有人准备后由房主开局、开始下一手或重置筹码。出局后可以继续观看。\n\n每手发两张底牌，依次进行翻牌前、翻牌（3 张）、转牌（1 张）、河牌（1 张）四轮下注。用你的底牌和公共牌中的任意五张，组成最强牌型。\n\n轮到你时：弃牌退出本手；过牌无需投入；跟注补齐差额；加注把本轮总下注提高到指定金额；全下投入剩余筹码。滑块与快捷按钮设置的是本轮下注总额。\n\n不足最小加注的全下，不会单独重新开放已行动玩家的加注权。边池分别结算，同分平分底池。多出的零头按庄家左侧顺序分配。\n\n牌型从强到弱：同花顺 > 四条 > 葫芦 > 同花 > 顺子 > 三条 > 两对 > 一对 > 高牌。A 可组成 A2345 的最小顺子。\n\n玩家离线会结束当前对局并返回房间，重新准备开局。房主离开会关闭房间。\n\n空格 跟注/过牌/下一手 · F 弃牌 · R 加注 · F11 全屏 · Esc 关闭指南。"
 	rules_panel.add_child(body)
 	var close_button = _button("回到牌桌", Rect2(630, 691, 180, 48), func(): rules_panel.hide(), true)
 	remove_child(close_button)
@@ -172,7 +184,7 @@ func _build_rules() -> void:
 	rules_panel.hide()
 
 func _ask_reset() -> void:
-	if _modal_open():
+	if _modal_open() or (online and not LanRoom.is_host):
 		return
 	var dialog = ConfirmationDialog.new()
 	dialog.title = "重新开局"
@@ -180,6 +192,24 @@ func _ask_reset() -> void:
 	dialog.ok_button_text = "重新开始"
 	dialog.cancel_button_text = "继续本局"
 	dialog.confirmed.connect(_reset_match)
+	dialog.visibility_changed.connect(func():
+		if not dialog.visible:
+			dialog.queue_free())
+	add_child(dialog)
+	dialog.popup_centered(Vector2i(450, 160))
+
+func _leave_game() -> void:
+	if _modal_open():
+		return
+	if not online:
+		exit_requested.emit()
+		return
+	var dialog = ConfirmationDialog.new()
+	dialog.title = "离开房间"
+	dialog.dialog_text = "你是房主，离开会关闭房间。" if LanRoom.is_host else "离开后，本局会结束，其他玩家返回房间。"
+	dialog.ok_button_text = "离开"
+	dialog.cancel_button_text = "继续游戏"
+	dialog.confirmed.connect(LanRoom.leave_room)
 	dialog.visibility_changed.connect(func():
 		if not dialog.visible:
 			dialog.queue_free())
@@ -195,11 +225,17 @@ func _modal_open() -> bool:
 	return false
 
 func _reset_match() -> void:
-	table.reset_match()
+	if online:
+		LanRoom.reset_game()
+	else:
+		table.reset_match()
 	_play_sound(460.0)
 
 func _next_hand() -> void:
 	if _modal_open():
+		return
+	if online:
+		LanRoom.next_hand()
 		return
 	if table.match_over():
 		_reset_match()
@@ -224,7 +260,10 @@ func _all_in() -> void:
 func _player_action(kind: String, target: int = 0) -> void:
 	if table.actor != 0 or _modal_open():
 		return
-	if table.act(kind, target):
+	if online:
+		LanRoom.request_action(kind, target)
+		_play_sound(250.0 if kind == "fold" else 580.0)
+	elif table.act(kind, target):
 		_play_sound(250.0 if kind == "fold" else 580.0)
 
 func _table_changed() -> void:
@@ -232,8 +271,8 @@ func _table_changed() -> void:
 		deal_progress = 0.0
 		previous_hand = table.hand_number
 		previous_board_size = table.board.size()
-	ai_wait = 0.72 + table.rng.randf() * 0.5
-	var your_turn = table.actor == 0 and not table.finished
+	ai_wait = 0.72 + randf() * 0.5
+	var your_turn = table.actor == 0 and not table.finished and (not online or not LanRoom.action_pending)
 	var raising = your_turn and table.can_raise(0)
 	for button in [fold_button, call_button, raise_button, allin_button]:
 		button.visible = not table.finished
@@ -246,7 +285,10 @@ func _table_changed() -> void:
 		call_button.text = "跟注全下 %d" % call_amount
 	next_button.visible = table.finished
 	next_button.text = "再来一局  →" if table.match_over() else "下一手  →"
-	reset_button.visible = table.finished and not table.match_over()
+	next_button.disabled = online and not LanRoom.is_host
+	if next_button.disabled:
+		next_button.text = "等待房主开始"
+	reset_button.visible = table.finished and not table.match_over() and (not online or LanRoom.is_host)
 	slider.visible = not table.finished
 	slider.editable = raising
 	slider.step = 1
@@ -259,19 +301,23 @@ func _table_changed() -> void:
 	result_panel.visible = table.finished
 	result_label.text = table.result_text
 	if table.finished:
-		status_label.text = "筹码已结算 · 点击下一手继续"
+		status_label.text = "筹码已结算 · 等待房主开始下一手" if online and not LanRoom.is_host else "筹码已结算 · 点击下一手继续"
 		if table.match_over():
-			status_label.text = "你赢下了整张牌桌！" if table.players[0].stack > 0 else "本局结束 · 再来一局试试吧"
+			status_label.text = "本局结束 · %s 赢下了牌桌" % table.players.filter(func(p): return p.stack > 0)[0].name if online else ("你赢下了整张牌桌！" if table.players[0].stack > 0 else "本局结束 · 再来一局试试吧")
 	elif your_turn:
 		status_label.text = "轮到你了 · 选择下方操作"
+	elif online and LanRoom.action_pending:
+		status_label.text = "操作已发送 · 等待房主确认"
+	elif online and table.players[0].hole.is_empty():
+		status_label.text = "你已出局，可以继续观看牌局"
 	else:
-		status_label.text = "%s 正在思考…" % table.players[table.actor].name
+		status_label.text = "等待 %s 行动…" % table.players[table.actor].name if online else "%s 正在思考…" % table.players[table.actor].name
 	queue_redraw()
 
 func _process(delta: float) -> void:
 	pulse += delta
 	deal_progress = minf(1.0, deal_progress + delta * 3.0)
-	if table != null and not table.finished and table.actor > 0 and not _modal_open() and not snapshot_mode:
+	if not online and table != null and not table.finished and table.actor > 0 and not _modal_open() and not snapshot_mode:
 		ai_wait -= delta
 		if ai_wait <= 0:
 			var choice = table.bot_action()
@@ -352,7 +398,7 @@ func _card(card: int, rect: Rect2, face_up: bool = true, dimmed: bool = false) -
 	var anim_rect = rect
 	anim_rect.position.y += 15 * pow(1.0 - deal_progress, 2)
 	_box(Rect2(anim_rect.position + Vector2(0, 5), anim_rect.size), Color(0, 0, 0, 0.24), Color.TRANSPARENT, 8)
-	if card < 0:
+	if card < 0 and face_up:
 		_box(anim_rect, Color("174a47"), Color("386560"), 8)
 		_text("·", anim_rect.get_center() + Vector2(0, 10), 40, Color("467771"), true)
 		return
@@ -391,14 +437,14 @@ func _draw() -> void:
 	_text("夜色牌局", Vector2(82, 59), 30)
 	_text("T E X A S   H O L D ’ E M", Vector2(244, 56), 13, MUTED)
 	_box(Rect2(464, 35, 154, 36), Color("163a3c"), Color("315354"), 18)
-	_text("单人练习 · 四人桌", Vector2(541, 59), 14, GREEN, true)
+	_text("局域网 · %d 人桌" % table.players.size() if online else "单人练习 · 四人桌", Vector2(541, 59), 14, GREEN, true)
 	_draw_felt()
 	_draw_board()
-	for seat in range(4):
+	for seat in range(table.players.size()):
 		_draw_seat(seat)
 	_draw_sidebar()
 	_draw_actions()
-	_text("离线练习 · 虚拟筹码", Vector2(35, 887), 13, MUTED)
+	_text("局域网联机 · 虚拟筹码" if online else "离线练习 · 虚拟筹码", Vector2(35, 887), 13, MUTED)
 	# Right-aligned footer.
 	var footer = "F11 全屏    /    空格 过牌或跟注"
 	_text(footer, Vector2(1404 - ui_font.get_string_size(footer, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x, 887), 13, MUTED)
@@ -436,8 +482,13 @@ func _draw_board() -> void:
 
 func _draw_seat(seat: int) -> void:
 	var p = table.players[seat]
-	var rect = Rect2(SEATS[seat], Vector2(300, 75) if seat == 0 else Vector2(210, 80))
-	if seat == 2:
+	var slot = seat
+	if table.players.size() == 2 and seat == 1:
+		slot = 2
+	elif table.players.size() == 3 and seat == 2:
+		slot = 3
+	var rect = Rect2(SEATS[slot], Vector2(300, 75) if seat == 0 else Vector2(210, 80))
+	if slot == 2:
 		rect.size = Vector2(252, 78)
 	var active = table.actor == seat
 	var border = GOLD if active else (GREEN if seat in table.winning_seats and table.finished else Color("355057"))
@@ -446,8 +497,11 @@ func _draw_seat(seat: int) -> void:
 	_box(rect, Color("122b32"), border, 14)
 	var avatar = rect.position + Vector2(31, 31)
 	draw_circle(avatar, 18, [Color("417f6c"), Color("435c78"), Color("77597a"), Color("8b6e47")][seat])
-	_text(["你", "林", "夏", "陆"][seat], avatar + Vector2(0, 7), 17, INK, true)
-	_text(p.name, rect.position + Vector2(61, 29), 17, MUTED if p.folded else INK)
+	_text("你" if seat == 0 else p.name.left(1), avatar + Vector2(0, 7), 17, INK, true)
+	var displayed_name: String = p.name
+	while ui_font.get_string_size(displayed_name, HORIZONTAL_ALIGNMENT_LEFT, -1, 17).x > rect.size.x - 105:
+		displayed_name = displayed_name.left(displayed_name.length() - 2) + "…"
+	_text(displayed_name, rect.position + Vector2(61, 29), 17, MUTED if p.folded else INK)
 	_text("%s 筹码" % p.stack, rect.position + Vector2(61, 53), 18, GOLD if seat == 0 else INK)
 	if seat != 0:
 		_text(p.action, rect.position + Vector2(15, 72), 13, GOLD if active else MUTED)
@@ -462,7 +516,7 @@ func _draw_seat(seat: int) -> void:
 	if seat == 0:
 		origin = Vector2(460, 544)
 		card_size = Vector2(92, 128)
-	elif seat == 2:
+	elif slot == 2:
 		origin = Vector2(499, 196)
 		card_size = Vector2(55, 77)
 	else:
@@ -475,7 +529,7 @@ func _draw_seat(seat: int) -> void:
 		_text("已弃牌", Vector2(origin.x + card_size.x + 6, origin.y + card_size.y / 2 + 6), 14, MUTED, true)
 	var bet_positions = [Vector2(760, 591), Vector2(272, 392), Vector2(694, 229), Vector2(801, 393)]
 	if p.street_bet > 0 and not table.finished:
-		var pos = bet_positions[seat]
+		var pos = bet_positions[slot]
 		_chip(pos, Color("ad645f"), 11)
 		_text(str(p.street_bet), pos + Vector2(0, 30), 14, Color("d1deca"), true)
 	if seat == table.small_blind_seat or seat == table.big_blind_seat:
@@ -493,7 +547,9 @@ func _draw_sidebar() -> void:
 	_text("10 / 20", Vector2(1260, 230), 23)
 	_text("你的牌力", Vector2(1136, 298), 15, MUTED)
 	var hand_name = "等待公共牌"
-	if table.board.size() >= 3:
+	if table.players[0].hole.size() != 2:
+		hand_name = "已出局 · 观战中"
+	elif table.board.size() >= 3:
 		hand_name = PokerRules.evaluate(table.players[0].hole + table.board).name
 	elif table.players[0].hole.size() == 2:
 		var a = table.players[0].hole[0]
