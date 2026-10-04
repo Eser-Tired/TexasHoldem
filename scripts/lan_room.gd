@@ -25,6 +25,7 @@ var connect_remaining = 0.0
 var seat_peers: Array = []
 
 func _ready() -> void:
+	MobileLayout.configure(get_tree().root)
 	multiplayer.connected_to_server.connect(_connected)
 	multiplayer.connection_failed.connect(func(): _failed("连接失败：请检查房主 IP、端口，或房间是否已满 / 开始。"))
 	multiplayer.server_disconnected.connect(func(): _failed("房主已离开或连接中断，已返回大厅。"))

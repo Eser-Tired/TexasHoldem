@@ -6,10 +6,10 @@ Godot 4 中文德州扑克小游戏，支持 **2–4 人局域网房间**和单�
 
 ## 开始游戏
 
-从 [v1.0.0 Release](https://github.com/Eser-Tired/TexasHoldem/releases/tag/v1.0.0) 下载：
+从 [v1.0.1 Release](https://github.com/Eser-Tired/TexasHoldem/releases/tag/v1.0.1) 下载：
 
-- **Windows x64**：运行 `NightfallPoker-v1.0.0-Windows-x64.exe`，游戏资源已内嵌，无需安装 Godot。
-- **Android 7.0 及以上**（设备支持 OpenGL ES 3.0）：安装 `NightfallPoker-v1.0.0-Android.apk`，横屏游玩。支持 ARM64、ARMv7 和 x86_64，APK 使用正式发布密钥签名。
+- **Windows x64**：运行 `NightfallPoker-v1.0.1-Windows-x64.exe`，游戏资源已内嵌，无需安装 Godot。
+- **Android 7.0 及以上**（设备支持 OpenGL ES 3.0）：安装 `NightfallPoker-v1.0.1-Android.apk`，横屏游玩。支持 ARM64、ARMv7 和 x86_64，APK 使用正式发布密钥签名。
 - `SHA256SUMS.txt` 提供两个文件的 SHA-256 校验值。
 
 Windows 与安卓可以连接同一局域网房间。所有人使用相同游戏版本。
@@ -45,6 +45,7 @@ Windows 与安卓可以连接同一局域网房间。所有人使用相同游戏
 - 输入金额是**本轮下注总额**。例如本轮已投入 20，输入 125 后加注，会再扣 105。小于最小加注、超过可用筹码、负数、小数和空值均不会下注。
 - 桌面端的滑块与「最小 / ½ 池 / 满池」会同步到输入框；安卓使用更大的按钮和数字输入框。
 - 全下：投入全部剩余筹码。
+- 手机版按可用屏幕宽度排列操作按钮与金额框，牌桌和扑克牌保持等比例；较宽屏幕显示牌局概览，窄屏优先显示牌桌。大厅居中适配，玩法说明可滚动，布局避开屏幕安全边距；输入时自动避让软键盘。
 - F11：全屏切换；Esc：关闭玩法说明或退出金额编辑。安卓返回键关闭说明 / 键盘，或返回大厅。
 - 顶部按钮：查看玩法、开关提示音、重新开局（联机时仅房主可操作）和离开房间 / 返回大厅。
 
@@ -69,6 +70,7 @@ Windows 与安卓可以连接同一局域网房间。所有人使用相同游戏
 - `scripts/lan_room.gd`：ENet 房间、准备状态、房主权威 RPC、个性化快照。
 - `scripts/poker_view.gd`：客户端只读牌局视图。
 - `scripts/menu.gd`：房间大厅与单机入口。
+- `scripts/mobile_layout.gd`：手机视口、安全边距与软键盘避让。
 - `scenes/main.tscn`：主场景。
 - `scenes/menu.tscn`：启动大厅。
 - `tests/test_poker.gd`：已知牌型、600 组七张牌穷举比较、边池、下注边界、500 手随机模拟和 60 手电脑策略对局。
@@ -91,6 +93,7 @@ godot_console --headless --editor --import --quit --path .
 godot_console --headless --path . --script res://tests/test_poker.gd
 godot_console --headless --path . --script res://tests/test_ui.gd
 godot_console --headless --path . --script res://tests/test_ui.gd -- --touch-layout
+godot_console --headless --path . --script res://tests/test_mobile_layout.gd -- --touch-layout
 godot_console --headless --path . --script res://tests/test_menu.gd
 godot_console --headless --path . --script res://tests/test_lan_rules.gd
 godot_console --headless --path . --script res://tests/test_lan_admission.gd

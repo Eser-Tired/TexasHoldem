@@ -39,10 +39,19 @@ var sound_enabled = true
 var audio_player: AudioStreamPlayer
 var snapshot_mode = false
 var pulse = 0.0
+var header_buttons: Array[Button] = []
+var mobile_rect = Rect2()
+var board_transform = Transform2D.IDENTITY
+var sidebar_transform = Transform2D.IDENTITY
+var show_sidebar = true
+var actions_rect = Rect2()
+var rules_heading: Label
+var rules_body: RichTextLabel
+var rules_close: Button
 
 func _ready() -> void:
 	online = LanRoom.phase == "playing" and LanRoom.view != null
-	touch_layout = OS.has_feature("mobile") or "--touch-layout" in OS.get_cmdline_user_args()
+	touch_layout = MobileLayout.enabled()
 	ui_font = GameFonts.ui()
 	if OS.has_feature("mobile"):
 		card_font = ui_font
@@ -59,6 +68,8 @@ func _ready() -> void:
 	audio_player.volume_db = -19
 	add_child(audio_player)
 	_build_controls()
+	get_viewport().size_changed.connect(_layout_mobile)
+	_layout_mobile()
 	table = LanRoom.view if online else PokerTable.new()
 	table.changed.connect(_table_changed)
 	if online:
@@ -109,14 +120,15 @@ func _button(text: String, rect: Rect2, callback: Callable, accent: bool = false
 	return b
 
 func _build_controls() -> void:
-	_button("玩法说明  ?", Rect2(1120, 37, 118, 40), func(): rules_panel.show())
+	var help_button = _button("玩法说明  ?", Rect2(1120, 37, 118, 40), func(): rules_panel.show())
 	restart_button = _button("重新开局", Rect2(1250, 37, 156, 40), _ask_reset)
 	restart_button.disabled = online and not LanRoom.is_host
-	_button("离开房间" if online else "返回大厅", Rect2(843, 37, 130, 40), _leave_game)
+	var leave_button = _button("离开房间" if online else "返回大厅", Rect2(843, 37, 130, 40), _leave_game)
 	sound_button = _button("声音 · 开", Rect2(987, 37, 118, 40), func():
 		sound_enabled = not sound_enabled
 		sound_button.text = "声音 · 开" if sound_enabled else "声音 · 关")
-	fold_button = _button("弃牌  F", Rect2(266, 808, 122, 52), func(): _player_action("fold"))
+	header_buttons.assign([leave_button, sound_button, help_button, restart_button])
+	fold_button = _button("弃牌" if touch_layout else "弃牌  F", Rect2(266, 808, 122, 52), func(): _player_action("fold"))
 	call_button = _button("过牌  SPACE", Rect2(398, 808, 157, 52), func(): _player_action("call"), true)
 	raise_button = _button("加注" if touch_layout else "加注  R", Rect2(565, 808, 157, 52), _raise_from_input)
 	allin_button = _button("全下", Rect2(732, 808, 112, 52), _all_in)
@@ -160,13 +172,6 @@ func _build_controls() -> void:
 	for i in range(3):
 		var index = i
 		quick_buttons.append(_button(["最小", "½ 池", "满池"][i], Rect2(1182 + i * 70, 819, 62, 34), func(): _quick_raise(index)))
-	if touch_layout:
-		for button in [fold_button, call_button, raise_button, allin_button, next_button, reset_button]:
-			button.position.y = 789
-			button.size.y = 79
-		fold_button.text = "弃牌"
-		amount_input.position = Vector2(1034, 797)
-		amount_input.size = Vector2(343, 65)
 	status_label = Label.new()
 	status_label.position = Vector2(282, 495)
 	status_label.size = Vector2(556, 32)
@@ -216,7 +221,63 @@ func _build_rules() -> void:
 	remove_child(close_button)
 	rules_panel.add_child(close_button)
 	close_button.position = Vector2(370, 566)
+	rules_heading = heading
+	rules_body = body
+	rules_close = close_button
 	rules_panel.hide()
+
+func _layout_mobile() -> void:
+	if not touch_layout or rules_panel == null:
+		return
+	mobile_rect = MobileLayout.safe_rect(get_viewport())
+	var r = mobile_rect
+	for i in range(header_buttons.size()):
+		var button = header_buttons[i]
+		button.position = Vector2(r.end.x - 584 + i * 148, r.position.y + 12)
+		button.size = Vector2(140, 62)
+		button.add_theme_font_size_override("font_size", 24)
+	actions_rect = Rect2(r.position.x, r.end.y - 142, r.size.x, 142)
+	var gap = 12.0
+	var unit = (r.size.x - 32 - gap * 4) / 5.4
+	var x = r.position.x + 16
+	var buttons = [fold_button, call_button, raise_button, allin_button]
+	var weights = [0.8, 1.2, 1.0, 0.8]
+	for i in range(buttons.size()):
+		buttons[i].position = Vector2(x, actions_rect.position.y + 53)
+		buttons[i].size = Vector2(unit * weights[i], 76)
+		buttons[i].add_theme_font_size_override("font_size", 28)
+		x += unit * weights[i] + gap
+	amount_input.position = Vector2(x, actions_rect.position.y + 53)
+	amount_input.size = Vector2(unit * 1.6, 76)
+	amount_input.add_theme_font_size_override("font_size", 30)
+	for i in range(2):
+		var button = next_button if i == 0 else reset_button
+		button.position = Vector2(r.end.x - 510 + i * 250, actions_rect.position.y + 53)
+		button.size = Vector2(238, 76)
+		button.add_theme_font_size_override("font_size", 26)
+	show_sidebar = r.size.x >= 1760
+	var table_area = Rect2(r.position.x, r.position.y + 90, r.size.x - (330 if show_sidebar else 0), actions_rect.position.y - r.position.y - 102)
+	var board_scale = minf(table_area.size.x / 1080, table_area.size.y / 675)
+	board_transform = Transform2D(0, Vector2.ONE * board_scale, 0, table_area.get_center() - Vector2(560, 442.5) * board_scale)
+	status_label.position = board_transform * Vector2(282, 495)
+	status_label.size = Vector2(556, 36)
+	status_label.scale = Vector2.ONE * board_scale
+	status_label.add_theme_font_size_override("font_size", 23)
+	result_panel.position = board_transform * Vector2(185, 282)
+	result_panel.scale = Vector2.ONE * board_scale
+	var sidebar_scale = minf(1, table_area.size.y / 653)
+	sidebar_transform = Transform2D(0, Vector2.ONE * sidebar_scale, 0, Vector2(r.end.x - 294 * sidebar_scale, table_area.position.y) - Vector2(1112, 113) * sidebar_scale)
+	rules_panel.size = Vector2(minf(1100, r.size.x - 32), minf(760, r.size.y - 32))
+	rules_panel.position = r.get_center() - rules_panel.size / 2
+	rules_heading.position = Vector2(30, 24)
+	rules_heading.add_theme_font_size_override("font_size", 30)
+	rules_body.position = Vector2(30, 85)
+	rules_body.size = rules_panel.size - Vector2(60, 195)
+	rules_body.add_theme_font_size_override("normal_font_size", 26)
+	rules_close.size = Vector2(260, 72)
+	rules_close.position = Vector2((rules_panel.size.x - 260) / 2, rules_panel.size.y - 92)
+	rules_close.add_theme_font_size_override("font_size", 26)
+	queue_redraw()
 
 func _ask_reset() -> void:
 	if _modal_open() or (online and not LanRoom.is_host):
@@ -415,8 +476,9 @@ func _process(delta: float) -> void:
 	deal_progress = minf(1.0, deal_progress + delta * 3.0)
 	if OS.has_feature("mobile"):
 		var keyboard_height = DisplayServer.virtual_keyboard_get_height() if amount_input.has_focus() else 0
-		var scale_y = maxf(0.01, get_viewport().get_screen_transform().get_scale().y)
-		position.y = -minf(500, keyboard_height / scale_y) if keyboard_height > 0 else 0
+		position.y = MobileLayout.keyboard_shift(self, amount_input, keyboard_height)
+	if touch_layout and mobile_rect != MobileLayout.safe_rect(get_viewport()):
+		_layout_mobile()
 	if not online and table != null and not table.finished and table.actor > 0 and not _modal_open() and not snapshot_mode:
 		ai_wait -= delta
 		if ai_wait <= 0:
@@ -540,6 +602,9 @@ func _card(card: int, rect: Rect2, face_up: bool = true, dimmed: bool = false) -
 func _draw() -> void:
 	if table == null:
 		return
+	if touch_layout:
+		_draw_mobile()
+		return
 	draw_rect(Rect2(0, 0, 1440, 900), BG)
 	for y in range(900):
 		draw_line(Vector2(0, y), Vector2(1440, y), Color(0.035 + y * 0.000007, 0.085 + y * 0.000017, 0.105 + y * 0.000012))
@@ -562,6 +627,28 @@ func _draw() -> void:
 	# Right-aligned footer.
 	var footer = "F11 全屏    /    空格 过牌或跟注"
 	_text(footer, Vector2(1404 - ui_font.get_string_size(footer, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x, 887), 13, MUTED)
+
+func _draw_mobile() -> void:
+	draw_rect(get_viewport().get_visible_rect(), BG)
+	var r = mobile_rect
+	_chip(r.position + Vector2(24, 41), GOLD, 19)
+	_text("夜色牌局", r.position + Vector2(55, 51), 32)
+	_text("局域网 · %d 人桌" % table.players.size() if online else "单机练习", r.position + Vector2(234, 50), 23, GREEN)
+	draw_line(Vector2(r.position.x, r.position.y + 85), Vector2(r.end.x, r.position.y + 85), Color("294047"))
+	draw_set_transform_matrix(board_transform)
+	_draw_felt()
+	_draw_board()
+	for seat in range(table.players.size()):
+		_draw_seat(seat)
+	if show_sidebar:
+		draw_set_transform_matrix(sidebar_transform)
+		_draw_sidebar()
+	draw_set_transform_matrix(Transform2D.IDENTITY)
+	_box(actions_rect, Color("122930"), Color("30444a"), 16)
+	var info = "本手结束 · 筹码已结算" if table.finished else ("轮到你 · " if table.actor == 0 else "等待对手 · ") + "需跟注 %d · 已下注 %d" % [table.to_call(0), table.players[0].street_bet]
+	_text(info, actions_rect.position + Vector2(18, 35), 24, GOLD)
+	if not table.finished:
+		_text("加注总额", Vector2(amount_input.position.x, actions_rect.position.y + 35), 24, GOLD if table.can_raise(0) else MUTED)
 
 func _draw_felt() -> void:
 	_oval(Vector2(560, 426), Vector2(500, 258), Color(0, 0, 0, 0.22))

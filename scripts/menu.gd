@@ -18,9 +18,14 @@ var ready_button: Button
 var status: Label
 var address_label: Label
 var game: Control
+var touch_layout = false
+var mobile_rect = Rect2()
+var content_transform = Transform2D.IDENTITY
+var control_rects: Dictionary = {}
 
 func _ready() -> void:
 	get_tree().quit_on_go_back = false
+	touch_layout = MobileLayout.enabled()
 	font = GameFonts.ui()
 	var palette = Theme.new()
 	palette.default_font = font
@@ -47,6 +52,20 @@ func _ready() -> void:
 	status.add_theme_font_size_override("font_size", 17)
 	status.add_theme_color_override("font_color", GOLD)
 	add_child(status)
+	if touch_layout:
+		for control in menu_controls + lobby_controls + [status]:
+			control_rects[control] = Rect2(control.position, control.size)
+			if control is Button or control is LineEdit or control is SpinBox or control is OptionButton:
+				control.add_theme_font_size_override("font_size", 24)
+				var rect: Rect2 = control_rects[control]
+				rect.size.y = maxf(rect.size.y, 64)
+				control_rects[control] = rect
+		for input in [name_input, ip_input, port_input.get_line_edit()]:
+			input.focus_exited.connect(func():
+				position.y = 0
+				DisplayServer.virtual_keyboard_hide())
+	get_viewport().size_changed.connect(_layout_mobile)
+	_layout_mobile()
 	LanRoom.phase_changed.connect(_phase_changed)
 	LanRoom.lobby_changed.connect(_refresh)
 	LanRoom.notice.connect(func(message): status.text = message)
@@ -160,6 +179,9 @@ func _practice() -> void:
 
 func _show_game() -> void:
 	if game == null:
+		position.y = 0
+		if OS.has_feature("mobile"):
+			DisplayServer.virtual_keyboard_hide()
 		game = GAME_SCENE.instantiate()
 		game.name = "Game"
 		game.exit_requested.connect(_end_practice)
@@ -188,6 +210,10 @@ func _refresh() -> void:
 	var in_lobby = LanRoom.phase == "lobby"
 	for control in menu_controls:
 		control.visible = not in_game and not in_lobby
+		if not control.visible:
+			var input = control.get_line_edit() if control is SpinBox else control
+			if input.has_focus():
+				input.release_focus()
 		if control is Button:
 			control.disabled = LanRoom.phase == "connecting"
 	for control in lobby_controls:
@@ -204,6 +230,32 @@ func _refresh() -> void:
 	status.text = LanRoom.last_message
 	queue_redraw()
 
+func _layout_mobile() -> void:
+	if not touch_layout or status == null:
+		return
+	mobile_rect = MobileLayout.safe_rect(get_viewport())
+	var area = Rect2(mobile_rect.position + Vector2(16, 100), mobile_rect.size - Vector2(32, 100))
+	var factor = minf(area.size.x / 900, area.size.y / 700)
+	content_transform = Transform2D(0, Vector2.ONE * factor, 0, area.get_center() - Vector2(720, 480) * factor)
+	for control in control_rects:
+		var rect: Rect2 = control_rects[control]
+		control.position = content_transform * rect.position
+		control.size = rect.size
+		control.scale = Vector2.ONE * factor
+	queue_redraw()
+
+func _process(_delta: float) -> void:
+	if not touch_layout:
+		return
+	if mobile_rect != MobileLayout.safe_rect(get_viewport()):
+		_layout_mobile()
+	if OS.has_feature("mobile") and game == null:
+		var field = get_viewport().gui_get_focus_owner()
+		if field is LineEdit:
+			position.y = MobileLayout.keyboard_shift(self, field, DisplayServer.virtual_keyboard_get_height())
+		else:
+			position.y = 0
+
 func _text(value: String, point: Vector2, font_size: int = 18, color: Color = INK, centered: bool = false) -> void:
 	if centered:
 		point.x -= font.get_string_size(value, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x / 2
@@ -211,6 +263,21 @@ func _text(value: String, point: Vector2, font_size: int = 18, color: Color = IN
 
 func _draw() -> void:
 	if game != null or font == null:
+		return
+	if touch_layout:
+		draw_rect(get_viewport().get_visible_rect(), Color("09191f"))
+		var r = mobile_rect
+		draw_circle(r.position + Vector2(26, 44), 21, GOLD)
+		_text("♠", r.position + Vector2(26, 53), 28, Color("153236"), true)
+		_text("夜色牌局", r.position + Vector2(65, 55), 34)
+		_text("局域网 · 2–4 人房间", Vector2(r.end.x - 280, r.position.y + 53), 26, GREEN)
+		draw_line(Vector2(r.position.x, r.position.y + 85), Vector2(r.end.x, r.position.y + 85), Color("294047"))
+		draw_set_transform_matrix(content_transform)
+		if LanRoom.phase == "lobby":
+			_draw_lobby()
+		else:
+			_draw_menu()
+		draw_set_transform_matrix(Transform2D.IDENTITY)
 		return
 	draw_rect(Rect2(0, 0, 1440, 900), Color("09191f"))
 	for y in range(900):
