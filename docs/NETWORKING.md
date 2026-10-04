@@ -8,6 +8,16 @@
 
 客户端可以准备 / 取消准备；房主默认准备。仅房主可以开始游戏、开始下一手和重置筹码。每次开局以已登记的玩家创建实际 2–4 人牌桌，不补充电脑。
 
+## 网络权限与诊断
+
+Android 导出开启 `INTERNET` 和 `ACCESS_NETWORK_STATE`，目标 SDK 36 的局域网访问无需额外运行时权限。`local_addresses()` 优先取 `wlan` / Wi-Fi / 热点网卡，排除蜂窝、VPN 和常见虚拟网卡；没有 Wi-Fi 时取以太网，然后回退有效 IPv4。客户端接受大厅复制的 `IPv4:port`。房主保持前台，客户端连接超时自动显示目标 IP、UDP 端口、本机地址和排障步骤。
+
+同一个 Wi-Fi 名称并不能保证设备互通。关闭 VPN / 加速器，检查厂商应用联网控制、访客网络和 AP / 客户端隔离；用手机热点对照排除原路由器限制。游戏无法改路由器策略。真机问题应提供「复制诊断」中的地址与手机系统信息。
+
+Windows 发布版开房先通过 `NetworkAccess` 异步启动内置 PowerShell，再绑定 ENet socket。只读检查无权限要求；缺少本游戏限定规则时通过 `Start-Process -Verb RunAs` 请求 UAC，创建程序路径、当前 UDP 端口和 `LocalSubnet` 入站规则，Profile 为 Any。路径、脚本和命令均以 Base64 编码传递，状态文件使用随机文件名，处理完成后删除。已有相同规则直接复用，既有拒绝规则或禁止合并本地规则的策略会反馈失败；不删除其他规则。规则保留以便下次开房，在高级防火墙中可按 `Nightfall Poker LAN UDP` 名称手动删除。源码、headless、截图和测试不请求 UAC。
+
+参考：[Android 局域网权限](https://developer.android.com/privacy-and-security/local-network-permission)、[Windows 防火墙规则优先级](https://learn.microsoft.com/en-us/windows/security/operating-system-security/network-security/windows-firewall/rules)。
+
 ## 权威牌局
 
 房主的 `PokerTable` 保存牌堆、所有底牌、随机源、轮次和筹码，是唯一能推进游戏的对象。客户端使用 `PokerView` 显示快照，不在本地发牌、算结果或自行改变筹码。

@@ -24,6 +24,10 @@ var content_transform = Transform2D.IDENTITY
 var control_rects: Dictionary = {}
 var update_button: Button
 var update_dialog: UpdateDialog
+var network_access: NetworkAccess
+var network_dialog: NetworkDialog
+var network_button: Button
+var _hosting = false
 
 func _ready() -> void:
 	get_tree().quit_on_go_back = false
@@ -44,6 +48,7 @@ func _ready() -> void:
 	palette.set_color("font_color", "Button", INK)
 	palette.set_color("font_disabled_color", "Button", Color("60797d"))
 	theme = palette
+	_build_network()
 	_build_updates()
 	_build_menu()
 	_build_lobby()
@@ -91,10 +96,16 @@ func _ready() -> void:
 	_layout_mobile()
 	LanRoom.phase_changed.connect(_phase_changed)
 	LanRoom.lobby_changed.connect(_refresh)
-	LanRoom.notice.connect(func(message): status.text = message)
+	LanRoom.notice.connect(_room_notice)
 	_phase_changed()
 	var args = OS.get_cmdline_user_args()
-	if "--snapshot" in args and "--snapshot-state=updates" in args:
+	if "--network-probe" in args:
+		_probe_network()
+	elif "--snapshot-state=network" in args:
+		LanRoom.host_room("房主", 4)
+		network_dialog.present()
+		_snapshot()
+	elif "--snapshot" in args and "--snapshot-state=updates" in args:
 		_snapshot_updates()
 	elif "--snapshot" in args and "--snapshot-state=menu" not in args and "--snapshot-state=lobby" not in args:
 		_practice()
@@ -123,6 +134,56 @@ func _build_updates() -> void:
 	layer.add_child(update_dialog)
 	Updater.changed.connect(_update_notice)
 	_update_notice()
+
+func _build_network() -> void:
+	network_access = NetworkAccess.new()
+	add_child(network_access)
+	var layer = CanvasLayer.new()
+	layer.layer = 21
+	add_child(layer)
+	network_dialog = NetworkDialog.new()
+	network_dialog.access = network_access
+	layer.add_child(network_dialog)
+	network_access.changed.connect(func():
+		if status != null and LanRoom.is_host:
+			status.text = "联机网络需要处理，点击“网络检查”查看。" if network_access.result_code in [2, 3, 4, 5, 6] else network_access.message)
+
+func _room_notice(message: String) -> void:
+	status.text = message
+	if message.begins_with("连接超时") or message.begins_with("连接失败"):
+		network_access.message = message
+		network_dialog.present()
+
+func _probe_network() -> void:
+	network_access.ensure_port(LanRoom.DEFAULT_PORT, false)
+	while network_access.busy:
+		await network_access.changed
+	print("Network probe: ", network_access.result_code, " / ", network_access.message)
+	get_tree().quit(0 if network_access.result_code in [0, 1, 4, 6] or OS.get_name() != "Windows" else 1)
+
+func _host() -> void:
+	if _hosting or LanRoom.phase != "menu":
+		return
+	var selected_port = int(port_input.value)
+	var selected_capacity = capacity_input.get_selected_id()
+	var selected_name = name_input.text
+	# Request the exception before binding the server socket, avoiding a race
+	# with Windows' generic application firewall prompt.
+	if not OS.has_feature("editor") and DisplayServer.get_name() != "headless":
+		_hosting = true
+		_refresh()
+		network_access.ensure_port(selected_port)
+		status.text = network_access.message
+		while network_access.busy:
+			await network_access.changed
+		_hosting = false
+	if LanRoom.phase == "menu":
+		LanRoom.host_room(selected_name, selected_capacity, selected_port)
+		if network_access.result_code in [2, 3, 4, 5, 6]:
+			status.text = "联机网络需要处理，点击“网络检查”查看。"
+	for control in menu_controls:
+		if control is Button:
+			control.disabled = LanRoom.phase == "connecting" or _hosting
 
 func _show_updates() -> void:
 	for field in [name_input, ip_input, port_input.get_line_edit()]:
@@ -180,8 +241,7 @@ func _build_menu() -> void:
 	capacity_input.select(2)
 	add_child(capacity_input)
 	menu_controls.append(capacity_input)
-	menu_controls.append(_button("创建房间  →", Rect2(350, 484, 326, 54), func():
-		LanRoom.host_room(name_input.text, capacity_input.get_selected_id(), int(port_input.value)), true))
+	menu_controls.append(_button("创建房间  →", Rect2(350, 484, 326, 54), _host, true))
 	ip_input = _line(Rect2(764, 401, 326, 44), "房主 IP，例如 192.168.1.8", 45)
 	ip_input.text_submitted.connect(func(_value): _join())
 	menu_controls.append(ip_input)
@@ -206,6 +266,8 @@ func _build_lobby() -> void:
 	ready_button = _button("准备", Rect2(814, 659, 250, 52), _toggle_ready, true)
 	lobby_controls.append(ready_button)
 	lobby_controls.append(_button("离开房间", Rect2(374, 659, 210, 52), LanRoom.leave_room))
+	network_button = _button("网络检查", Rect2(602, 659, 188, 52), network_dialog.present)
+	lobby_controls.append(network_button)
 
 func _join() -> void:
 	if LanRoom.phase == "menu":
@@ -261,7 +323,7 @@ func _refresh() -> void:
 			if input.has_focus():
 				input.release_focus()
 		if control is Button:
-			control.disabled = LanRoom.phase == "connecting"
+			control.disabled = LanRoom.phase == "connecting" or _hosting
 	for control in lobby_controls:
 		control.visible = not in_game and in_lobby
 	start_button.visible = not in_game and in_lobby and LanRoom.is_host
@@ -432,7 +494,7 @@ func _draw_mobile_lobby() -> void:
 	_text("离线会结束对局并返回房间。", Vector2(720, 640), 16, MUTED, true)
 
 func _input(event: InputEvent) -> void:
-	if update_dialog.visible:
+	if update_dialog.visible or network_dialog.visible:
 		return
 	if game != null or not event is InputEventKey or not event.pressed or event.echo:
 		return
@@ -446,6 +508,9 @@ func _input(event: InputEvent) -> void:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_GO_BACK_REQUEST and game == null and is_node_ready():
+		if network_dialog.visible:
+			network_dialog.hide()
+			return
 		if update_dialog.visible:
 			update_dialog.hide()
 			return

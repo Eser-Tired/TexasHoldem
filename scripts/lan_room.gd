@@ -36,7 +36,7 @@ func _process(delta: float) -> void:
 	if phase == "connecting":
 		connect_remaining -= delta
 		if connect_remaining <= 0:
-			_failed("连接超时：请确认处于同一局域网，并允许游戏通过专用网络防火墙。")
+			_failed("连接超时（%s:%d / UDP）：请检查房主防火墙、IP、VPN 和路由器客户端隔离。" % [address, port])
 
 func clean_name(value: String) -> String:
 	var cleaned = value.replace("\n", " ").replace("\r", " ").replace("\t", " ").strip_edges().left(10)
@@ -65,7 +65,9 @@ func host_room(player_name: String, room_capacity: int = 4, room_port: int = DEF
 func join_room(player_name: String, host_address: String, room_port: int = DEFAULT_PORT) -> Error:
 	if phase != "menu" or room_port < 1024 or room_port > 65535:
 		return ERR_INVALID_PARAMETER
-	var ip = host_address.strip_edges()
+	var endpoint = parse_endpoint(host_address, room_port)
+	var ip: String = endpoint.address
+	room_port = endpoint.port
 	if ip.to_lower() == "localhost":
 		ip = "127.0.0.1"
 	if not ip.is_valid_ip_address():
@@ -86,6 +88,19 @@ func join_room(player_name: String, host_address: String, room_port: int = DEFAU
 	multiplayer.multiplayer_peer = peer
 	phase_changed.emit()
 	return OK
+
+func parse_endpoint(value: String, fallback_port: int) -> Dictionary:
+	var ip = value.strip_edges()
+	var selected_port = fallback_port
+	# Accept the IPv4:port string produced by the lobby's copy button.
+	if ip.count(":") == 1:
+		var parts = ip.split(":")
+		if parts[0].is_valid_ip_address() and parts[1].is_valid_int():
+			ip = parts[0]
+			selected_port = int(parts[1])
+	if selected_port < 1024 or selected_port > 65535:
+		ip = ""
+	return {"address": ip, "port": selected_port}
 
 func leave_room() -> void:
 	if phase != "menu" and multiplayer.multiplayer_peer is ENetMultiplayerPeer:
@@ -296,8 +311,35 @@ func _peer_disconnected(peer_id: int) -> void:
 	_broadcast_lobby()
 
 func local_addresses() -> Array:
+	return preferred_addresses(IP.get_local_interfaces(), IP.get_local_addresses())
+
+func preferred_addresses(interfaces: Array, fallback: Array) -> Array:
+	var wifi: Array = []
+	var wired: Array = []
+	for interface in interfaces:
+		var label = (str(interface.get("name", "")) + " " + str(interface.get("friendly", ""))).to_lower()
+		# Phones often enumerate rmnet (cellular) or tun (VPN) before wlan0.
+		# Sharing those addresses makes a same-Wi-Fi room unreachable.
+		if label.contains("tun") or label.contains("tap") or label.contains("vpn") or label.contains("rmnet") or label.contains("pdp") or label.contains("clash"):
+			continue
+		if label.contains("virtual") or label.contains("vethernet") or label.contains("vmware") or label.contains("vbox") or label.contains("docker"):
+			continue
+		var is_wifi = label.contains("wlan") or label.contains("wi-fi") or label.contains("wifi") or label.contains("ap0")
+		var bucket: Array = wifi if is_wifi else wired
+		if not is_wifi and not (label.contains("eth") or label.contains("以太网") or label.begins_with("en0") or label.begins_with("en1")):
+			continue
+		for ip in interface.get("addresses", []):
+			if _usable_lan_ip(ip) and not bucket.has(ip):
+				bucket.append(ip)
+	if not wifi.is_empty():
+		return wifi
+	if not wired.is_empty():
+		return wired
 	var addresses: Array = []
-	for ip in IP.get_local_addresses():
-		if ":" not in ip and not ip.begins_with("127.") and not ip.begins_with("169.254.") and ip != "0.0.0.0":
+	for ip in fallback:
+		if _usable_lan_ip(ip) and not addresses.has(ip):
 			addresses.append(ip)
 	return addresses
+
+func _usable_lan_ip(ip: String) -> bool:
+	return ip.is_valid_ip_address() and ":" not in ip and not ip.begins_with("127.") and not ip.begins_with("169.254.") and ip != "0.0.0.0"
