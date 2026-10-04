@@ -6,10 +6,10 @@ Godot 4 中文德州扑克小游戏，支持 **2–4 人局域网房间**和单�
 
 ## 开始游戏
 
-从 [v1.0.1 Release](https://github.com/Eser-Tired/TexasHoldem/releases/tag/v1.0.1) 下载：
+从 [v1.0.2 Release](https://github.com/Eser-Tired/TexasHoldem/releases/tag/v1.0.2) 下载：
 
-- **Windows x64**：运行 `NightfallPoker-v1.0.1-Windows-x64.exe`，游戏资源已内嵌，无需安装 Godot。
-- **Android 7.0 及以上**（设备支持 OpenGL ES 3.0）：安装 `NightfallPoker-v1.0.1-Android.apk`，横屏游玩。支持 ARM64、ARMv7 和 x86_64，APK 使用正式发布密钥签名。
+- **Windows x64**：运行 `NightfallPoker-v1.0.2-Windows-x64.exe`，游戏资源已内嵌，无需安装 Godot。
+- **Android 7.0 及以上**（设备支持 OpenGL ES 3.0）：安装 `NightfallPoker-v1.0.2-Android.apk`，横屏游玩。支持 ARM64、ARMv7 和 x86_64，APK 使用正式发布密钥签名。
 - `SHA256SUMS.txt` 提供两个文件的 SHA-256 校验值。
 
 Windows 与安卓可以连接同一局域网房间。所有人使用相同游戏版本。
@@ -17,6 +17,16 @@ Windows 与安卓可以连接同一局域网房间。所有人使用相同游戏
 从源码运行：安装 Godot 4（已验证 4.7.2），下载项目，双击 `开始游戏.cmd`。启动器会查找 WinGet 安装路径或 PATH 中的 Godot，先导入项目资源与脚本，再打开游戏；也可在 Godot 中导入 `project.godot` 并按 F5 运行。不需要 Python 或插件。
 
 编辑项目：双击 `打开编辑器.cmd`，或者在 Godot 项目管理器中导入 `project.godot`，按 F5 运行。
+
+## 游戏更新
+
+从 **v1.0.2** 开始，Windows 和 Android 安装包启动时在后台检查本仓库 GitHub 最新正式 Release。发现更高版本后，大厅顶部显示「新版 v…」；点击查看说明并下载。也可通过「检查更新」手动重试。预发布版、相同版本和旧版本不会触发升级；检查失败不影响游玩。
+
+- **Windows**：游戏内显示下载进度，支持取消、重试。文件大小和 GitHub 提供的 SHA-256 校验通过后，点击「打开下载位置」。文件保存在游戏用户数据目录的 `updates/`，退出旧游戏后替换原 EXE 或直接运行新 EXE。
+- **Android**：点击「下载新版」直接打开系统浏览器下载该 Release 的 APK；下载完成后打开 APK，按照系统提示允许浏览器安装应用并确认升级。保持原签名密钥的新版可以覆盖安装。游戏不额外申请安装或共享存储权限。
+- 「发布页面」提供手动下载入口。更新需要能访问 GitHub；局域网对局本身不需要互联网。
+- 支持标准 `http://主机:端口` 格式的 `HTTP_PROXY` / `HTTPS_PROXY` 环境变量。下载长时间无进度会提示超时，可重试或使用发布页面。
+- 旧版没有更新入口，需要先手动安装一次 v1.0.2。源码运行和自动测试不自动联网，可手动检查。
 
 ## 局域网联机
 
@@ -71,6 +81,8 @@ Windows 与安卓可以连接同一局域网房间。所有人使用相同游戏
 - `scripts/poker_view.gd`：客户端只读牌局视图。
 - `scripts/menu.gd`：房间大厅与单机入口。
 - `scripts/mobile_layout.gd`：手机视口、安全边距与软键盘避让。
+- `scripts/update_service.gd`：GitHub 正式版检查、平台文件选择、Windows 下载与校验、Android 浏览器下载入口。
+- `scripts/update_dialog.gd`：适配桌面和手机的更新界面。
 - `scenes/main.tscn`：主场景。
 - `scenes/menu.tscn`：启动大厅。
 - `tests/test_poker.gd`：已知牌型、600 组七张牌穷举比较、边池、下注边界、500 手随机模拟和 60 手电脑策略对局。
@@ -94,10 +106,14 @@ godot_console --headless --path . --script res://tests/test_poker.gd
 godot_console --headless --path . --script res://tests/test_ui.gd
 godot_console --headless --path . --script res://tests/test_ui.gd -- --touch-layout
 godot_console --headless --path . --script res://tests/test_mobile_layout.gd -- --touch-layout
+godot_console --headless --path . --script res://tests/test_updates.gd
+godot_console --headless --path . --script res://tests/test_updates.gd -- --touch-layout
 godot_console --headless --path . --script res://tests/test_menu.gd
 godot_console --headless --path . --script res://tests/test_lan_rules.gd
 godot_console --headless --path . --script res://tests/test_lan_admission.gd
 powershell -NoProfile -ExecutionPolicy Bypass -File tests/Run-LanTests.ps1
 ```
+
+真实 GitHub 接口检查（需要网络）：`godot_console --headless --path . --script res://tests/test_update_github.gd`。追加 `-- --download` 会下载当前 Windows Release、校验并删除测试文件，约消耗 120 MB 流量。常规更新测试使用本地 HTTP 测试服务，不访问互联网。
 
 无需插件；牌桌、扑克牌和图标随项目提供。中文与花色字形使用内置 Noto Sans SC 字体，遵循 [SIL Open Font License](assets/fonts/OFL.txt)，来源为 [Google Fonts](https://github.com/google/fonts/tree/main/ofl/notosanssc)。安装包内包含字体许可文本。

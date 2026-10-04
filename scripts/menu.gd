@@ -22,6 +22,8 @@ var touch_layout = false
 var mobile_rect = Rect2()
 var content_transform = Transform2D.IDENTITY
 var control_rects: Dictionary = {}
+var update_button: Button
+var update_dialog: UpdateDialog
 
 func _ready() -> void:
 	get_tree().quit_on_go_back = false
@@ -42,6 +44,7 @@ func _ready() -> void:
 	palette.set_color("font_color", "Button", INK)
 	palette.set_color("font_disabled_color", "Button", Color("60797d"))
 	theme = palette
+	_build_updates()
 	_build_menu()
 	_build_lobby()
 	status = Label.new()
@@ -71,7 +74,9 @@ func _ready() -> void:
 	LanRoom.notice.connect(func(message): status.text = message)
 	_phase_changed()
 	var args = OS.get_cmdline_user_args()
-	if "--snapshot" in args and "--snapshot-state=menu" not in args and "--snapshot-state=lobby" not in args:
+	if "--snapshot" in args and "--snapshot-state=updates" in args:
+		_snapshot_updates()
+	elif "--snapshot" in args and "--snapshot-state=menu" not in args and "--snapshot-state=lobby" not in args:
 		_practice()
 	elif "--snapshot-state=lobby" in args:
 		LanRoom.host_room("房主", 4)
@@ -88,6 +93,26 @@ func _style(color: Color, border: Color) -> StyleBoxFlat:
 	box.content_margin_left = 15
 	box.content_margin_right = 15
 	return box
+
+func _build_updates() -> void:
+	update_button = _button("检查更新", Rect2(950, 30, 185, 50), _show_updates)
+	var layer = CanvasLayer.new()
+	layer.layer = 20
+	add_child(layer)
+	update_dialog = UpdateDialog.new()
+	layer.add_child(update_dialog)
+	Updater.changed.connect(_update_notice)
+	_update_notice()
+
+func _show_updates() -> void:
+	for field in [name_input, ip_input, port_input.get_line_edit()]:
+		if field.has_focus():
+			field.release_focus()
+	update_dialog.present()
+
+func _update_notice() -> void:
+	update_button.text = "新版 " + str(Updater.release.get("tag", "")) if Updater.state in ["available", "unavailable", "browser"] else ("正在下载…" if Updater.state in ["downloading", "verifying"] else ("更新已下载" if Updater.state == "ready" else "检查更新"))
+	update_button.tooltip_text = Updater.message
 
 func _button(text: String, rect: Rect2, callback: Callable, gold: bool = false) -> Button:
 	var button = Button.new()
@@ -207,6 +232,7 @@ func _phase_changed() -> void:
 
 func _refresh() -> void:
 	var in_game = game != null
+	update_button.visible = not in_game
 	var in_lobby = LanRoom.phase == "lobby"
 	for control in menu_controls:
 		control.visible = not in_game and not in_lobby
@@ -234,6 +260,9 @@ func _layout_mobile() -> void:
 	if not touch_layout or status == null:
 		return
 	mobile_rect = MobileLayout.safe_rect(get_viewport())
+	update_button.position = Vector2(mobile_rect.end.x - 540, mobile_rect.position.y + 12)
+	update_button.size = Vector2(230, 62)
+	update_button.add_theme_font_size_override("font_size", 24)
 	var area = Rect2(mobile_rect.position + Vector2(16, 100), mobile_rect.size - Vector2(32, 100))
 	var factor = minf(area.size.x / 900, area.size.y / 700)
 	content_transform = Transform2D(0, Vector2.ONE * factor, 0, area.get_center() - Vector2(720, 480) * factor)
@@ -336,6 +365,8 @@ func _draw_lobby() -> void:
 	_text("开局后关闭新玩家加入；离线会返回房间。", Vector2(720, 635), 16, MUTED, true)
 
 func _input(event: InputEvent) -> void:
+	if update_dialog.visible:
+		return
 	if game != null or not event is InputEventKey or not event.pressed or event.echo:
 		return
 	if event.keycode == KEY_ESCAPE and LanRoom.phase == "connecting":
@@ -348,6 +379,9 @@ func _input(event: InputEvent) -> void:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_GO_BACK_REQUEST and game == null and is_node_ready():
+		if update_dialog.visible:
+			update_dialog.hide()
+			return
 		if LanRoom.phase in ["connecting", "lobby"]:
 			LanRoom.leave_room()
 
@@ -360,5 +394,18 @@ func _snapshot() -> void:
 			path = arg.trim_prefix("--snapshot-path=")
 	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
 	var error = get_viewport().get_texture().get_image().save_png(path)
+	if "--snapshot-auto-update" in OS.get_cmdline_user_args():
+		var diagnostic = FileAccess.open(path + ".update.txt", FileAccess.WRITE)
+		if diagnostic != null:
+			diagnostic.store_string(Updater.state + "\n" + Updater.message)
+			diagnostic.close()
 	print("Snapshot saved: ", path, " (", error, ")")
 	get_tree().quit(error)
+
+func _snapshot_updates() -> void:
+	var deadline = Time.get_ticks_msec() + 18000
+	if "--snapshot-auto-update" in OS.get_cmdline_user_args():
+		while Updater.state in ["idle", "checking"] and Time.get_ticks_msec() < deadline:
+			await get_tree().process_frame
+	_show_updates()
+	_snapshot()

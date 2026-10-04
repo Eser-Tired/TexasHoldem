@@ -3,13 +3,14 @@ config_version=5
 
 [application]
 config/name="夜色牌局 · 德州扑克"
-config/version="1.0.1"
+config/version="1.0.2"
 run/main_scene="res://scenes/menu.tscn"
 config/features=PackedStringArray("4.4", "GL Compatibility")
 config/icon="res://assets/icon.svg"
 
 [autoload]
 LanRoom="*res://scripts/lan_room.gd"
+Updater="*res://scripts/update_service.gd"
 
 [display]
 window/size/viewport_width=1440
