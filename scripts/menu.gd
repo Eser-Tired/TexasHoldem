@@ -31,7 +31,7 @@ func _ready() -> void:
 	font = GameFonts.ui()
 	var palette = Theme.new()
 	palette.default_font = font
-	palette.default_font_size = 18
+	palette.default_font_size = GameFonts.size(18)
 	palette.set_stylebox("normal", "LineEdit", _style(Color("0c222a"), Color("456368")))
 	palette.set_stylebox("focus", "LineEdit", _style(Color("15343b"), GOLD))
 	palette.set_color("font_color", "LineEdit", INK)
@@ -52,14 +52,34 @@ func _ready() -> void:
 	status.size = Vector2(880, 60)
 	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	status.add_theme_font_size_override("font_size", 17)
+	status.add_theme_font_size_override("font_size", GameFonts.size(17))
 	status.add_theme_color_override("font_color", GOLD)
 	add_child(status)
 	if touch_layout:
+		name_input.placeholder_text = "昵称（最多 10 字）"
+		ip_input.placeholder_text = "房主 IP 地址"
+		name_input.position.y = 230
+		port_input.position.y = 230
+		capacity_input.position = Vector2(470, 449)
+		capacity_input.size.x = 206
+		capacity_input.get_popup().add_theme_font_override("font", font)
+		capacity_input.get_popup().add_theme_font_size_override("font_size", GameFonts.size(24))
+		ip_input.position.y = 449
+		for control in menu_controls:
+			if control is Button and control.text.begins_with("单机"):
+				control.position.x = 440
+				control.size.x = 560
+			elif control is Button and not control is OptionButton:
+				control.position.y = 531
+		lobby_controls[1].position.x = 846
+		lobby_controls[1].size.x = 290
+		address_label.position.y = 279
+		address_label.size.y = 96
+		address_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		for control in menu_controls + lobby_controls + [status]:
 			control_rects[control] = Rect2(control.position, control.size)
 			if control is Button or control is LineEdit or control is SpinBox or control is OptionButton:
-				control.add_theme_font_size_override("font_size", 24)
+				control.add_theme_font_size_override("font_size", GameFonts.size(24))
 				var rect: Rect2 = control_rects[control]
 				rect.size.y = maxf(rect.size.y, 64)
 				control_rects[control] = rect
@@ -173,7 +193,7 @@ func _build_lobby() -> void:
 	address_label.position = Vector2(304, 252)
 	address_label.size = Vector2(826, 64)
 	address_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	address_label.add_theme_font_size_override("font_size", 17)
+	address_label.add_theme_font_size_override("font_size", GameFonts.size(17))
 	address_label.add_theme_color_override("font_color", GREEN)
 	add_child(address_label)
 	lobby_controls.append(address_label)
@@ -260,9 +280,9 @@ func _layout_mobile() -> void:
 	if not touch_layout or status == null:
 		return
 	mobile_rect = MobileLayout.safe_rect(get_viewport())
-	update_button.position = Vector2(mobile_rect.end.x - 540, mobile_rect.position.y + 12)
-	update_button.size = Vector2(230, 62)
-	update_button.add_theme_font_size_override("font_size", 24)
+	update_button.position = Vector2(mobile_rect.end.x - 290, mobile_rect.position.y + 8)
+	update_button.size = Vector2(280, 72)
+	update_button.add_theme_font_size_override("font_size", GameFonts.size(24))
 	var area = Rect2(mobile_rect.position + Vector2(16, 100), mobile_rect.size - Vector2(32, 100))
 	var factor = minf(area.size.x / 900, area.size.y / 700)
 	content_transform = Transform2D(0, Vector2.ONE * factor, 0, area.get_center() - Vector2(720, 480) * factor)
@@ -286,6 +306,7 @@ func _process(_delta: float) -> void:
 			position.y = 0
 
 func _text(value: String, point: Vector2, font_size: int = 18, color: Color = INK, centered: bool = false) -> void:
+	font_size = GameFonts.size(font_size)
 	if centered:
 		point.x -= font.get_string_size(value, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x / 2
 	draw_string(font, point, value, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
@@ -299,7 +320,7 @@ func _draw() -> void:
 		draw_circle(r.position + Vector2(26, 44), 21, GOLD)
 		_text("♠", r.position + Vector2(26, 53), 28, Color("153236"), true)
 		_text("夜色牌局", r.position + Vector2(65, 55), 34)
-		_text("局域网 · 2–4 人房间", Vector2(r.end.x - 280, r.position.y + 53), 26, GREEN)
+		_text("2–4 人局域网", r.position + Vector2(305, 55), 26, GREEN)
 		draw_line(Vector2(r.position.x, r.position.y + 85), Vector2(r.end.x, r.position.y + 85), Color("294047"))
 		draw_set_transform_matrix(content_transform)
 		if LanRoom.phase == "lobby":
@@ -326,6 +347,9 @@ func _draw() -> void:
 	_text("虚拟筹码 · 和朋友轻松开一桌", Vector2(720, 860), 14, MUTED, true)
 
 func _draw_menu() -> void:
+	if touch_layout:
+		_draw_mobile_menu()
+		return
 	_text("和朋友开一桌", Vector2(720, 157), 36, INK, true)
 	_text("创建房间，分享 IP，等大家准备后一起入局。", Vector2(720, 192), 17, MUTED, true)
 	_text("昵称", Vector2(336, 245), 19)
@@ -344,6 +368,9 @@ func _draw_menu() -> void:
 		_text("正在连接…  Esc 取消", Vector2(720, 841), 17, GOLD, true)
 
 func _draw_lobby() -> void:
+	if touch_layout:
+		_draw_mobile_lobby()
+		return
 	draw_style_box(_style(Color("122b33"), Color("385157")), Rect2(270, 169, 900, 575))
 	_text("%s的房间" % LanRoom.members[0].name, Vector2(304, 217), 28, GOLD)
 	_text("%d / %d 人 · 所有人准备后开始" % [LanRoom.members.size(), LanRoom.capacity], Vector2(304, 245), 16, MUTED)
@@ -363,6 +390,46 @@ func _draw_lobby() -> void:
 			_text("你", row.position + Vector2(354, 34), 16, GREEN)
 		_text("已准备  ✓" if member.ready else "等待准备", row.position + Vector2(701, 35), 17, GREEN if member.ready else MUTED)
 	_text("开局后关闭新玩家加入；离线会返回房间。", Vector2(720, 635), 16, MUTED, true)
+
+func _draw_mobile_menu() -> void:
+	_text("和朋友开一桌", Vector2(720, 162), 36, INK, true)
+	_text("创建房间，分享 IP，准备后一起入局。", Vector2(720, 205), 17, MUTED, true)
+	_text("昵称", Vector2(330, 273), 19)
+	_text("端口", Vector2(750, 273), 19)
+	for x in [318, 732]:
+		draw_style_box(_style(Color("132d34"), Color("385157")), Rect2(x, 320, 390, 295))
+	_text("做一回房主", Vector2(350, 372), 26, GOLD)
+	_text("邀请 1–3 位朋友", Vector2(350, 415), 16, MUTED)
+	_text("人数上限", Vector2(350, 490), 18)
+	_text("加入朋友的牌桌", Vector2(764, 372), 26, GOLD)
+	_text("填写房主 IP 和相同端口", Vector2(764, 415), 16, MUTED)
+	_text("请连接同一 Wi-Fi / 局域网。", Vector2(720, 638), 16, MUTED, true)
+	_text("单机模式也可练习下注与牌型。", Vector2(720, 750), 16, MUTED, true)
+	if LanRoom.phase == "connecting":
+		_text("正在连接…", Vector2(720, 841), 17, GOLD, true)
+
+func _draw_mobile_lobby() -> void:
+	draw_style_box(_style(Color("122b33"), Color("385157")), Rect2(270, 169, 900, 575))
+	var host_name: String = LanRoom.members[0].name
+	if host_name.length() > 7:
+		host_name = host_name.left(7) + "…"
+	_text("%s的房间" % host_name, Vector2(304, 217), 28, GOLD)
+	_text("%d / %d 人 · 准备后开始" % [LanRoom.members.size(), LanRoom.capacity], Vector2(304, 265), 16, MUTED)
+	for i in range(4):
+		var row = Rect2(304, 390 + i * 56, 832, 50)
+		draw_style_box(_style(Color("1a373e"), Color("2c4c51")), row)
+		if i >= LanRoom.members.size():
+			_text("等待朋友加入…" if i < LanRoom.capacity else "此座位未开放", row.position + Vector2(25, 35), 17, MUTED)
+			continue
+		var member = LanRoom.members[i]
+		_text(str(i + 1), row.position + Vector2(28, 35), 18, INK, true)
+		_text(member.name, row.position + Vector2(58, 35), 20)
+		if member.peer_id == 1:
+			_text("房主", row.position + Vector2(390, 35), 16, GOLD)
+		if member.peer_id == multiplayer.get_unique_id():
+			_text("你", row.position + Vector2(490, 35), 16, GREEN)
+		_text("已准备 ✓" if member.ready else "等待准备", row.position + Vector2(650, 35), 17, GREEN if member.ready else MUTED)
+	_text("离线会结束对局并返回房间。", Vector2(720, 640), 16, MUTED, true)
 
 func _input(event: InputEvent) -> void:
 	if update_dialog.visible:

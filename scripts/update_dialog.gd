@@ -15,7 +15,7 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var palette = Theme.new()
 	palette.default_font = GameFonts.ui()
-	palette.default_font_size = 24 if MobileLayout.enabled() else 19
+	palette.default_font_size = GameFonts.size(24) if MobileLayout.enabled() else 19
 	theme = palette
 	var shade = ColorRect.new()
 	shade.color = Color(0, 0, 0, 0.72)
@@ -40,7 +40,7 @@ func _ready() -> void:
 	margin.add_child(column)
 	heading = Label.new()
 	heading.text = "游戏更新 · v" + Updater.current_version
-	heading.add_theme_font_size_override("font_size", 30)
+	heading.add_theme_font_size_override("font_size", GameFonts.size(30))
 	heading.add_theme_color_override("font_color", Color("d8ba73"))
 	column.add_child(heading)
 	status = Label.new()
@@ -78,7 +78,7 @@ func _ready() -> void:
 func _button(text: String, callback: Callable) -> Button:
 	var button = Button.new()
 	button.text = text
-	button.custom_minimum_size = Vector2(180, 68 if MobileLayout.enabled() else 52)
+	button.custom_minimum_size = Vector2(180, 80 if MobileLayout.enabled() else 52)
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var style = StyleBoxFlat.new()
 	style.bg_color = Color("23434a")

@@ -4,6 +4,8 @@ func _initialize() -> void:
 	call_deferred("run")
 
 func run() -> void:
+	if not MobileLayout.enabled():
+		assert(GameFonts.size(24) == 24 and GameFonts.ui().variation_opentype == {"wght": 450.0}, "Desktop typography stays unchanged")
 	var main = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
 	main.snapshot_mode = true

@@ -53,7 +53,7 @@ func _ready() -> void:
 	online = LanRoom.phase == "playing" and LanRoom.view != null
 	touch_layout = MobileLayout.enabled()
 	ui_font = GameFonts.ui()
-	if OS.has_feature("mobile"):
+	if touch_layout:
 		card_font = ui_font
 	else:
 		var serif = SystemFont.new()
@@ -62,7 +62,7 @@ func _ready() -> void:
 	symbol_font = ui_font
 	var theme_resource = Theme.new()
 	theme_resource.default_font = ui_font
-	theme_resource.default_font_size = 17
+	theme_resource.default_font_size = GameFonts.size(17)
 	theme = theme_resource
 	audio_player = AudioStreamPlayer.new()
 	audio_player.volume_db = -19
@@ -190,7 +190,7 @@ func _build_controls() -> void:
 	result_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	result_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	result_label.clip_text = true
-	result_label.add_theme_font_size_override("font_size", 17)
+	result_label.add_theme_font_size_override("font_size", GameFonts.size(17))
 	result_label.add_theme_color_override("font_color", GOLD)
 	result_panel.add_child(result_label)
 	_build_rules()
@@ -204,7 +204,7 @@ func _build_rules() -> void:
 	var heading = Label.new()
 	heading.text = "牌桌指南 · 可滚动阅读"
 	heading.position = Vector2(38, 24)
-	heading.add_theme_font_size_override("font_size", 28)
+	heading.add_theme_font_size_override("font_size", GameFonts.size(28))
 	heading.add_theme_color_override("font_color", GOLD)
 	rules_panel.add_child(heading)
 	var body = RichTextLabel.new()
@@ -212,7 +212,7 @@ func _build_rules() -> void:
 	body.size = Vector2(845, 460)
 	body.scroll_active = true
 	body.selection_enabled = true
-	body.add_theme_font_size_override("normal_font_size", 19)
+	body.add_theme_font_size_override("normal_font_size", GameFonts.size(19))
 	body.add_theme_color_override("default_color", INK)
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body.text = "每人初始 1,000 筹码，小盲 10 / 大盲 20。局域网支持 2–4 人；全部准备后由房主开局、开始下一手或重置筹码。出局后可以观看。\n\n每手两张底牌，依次进行翻牌前、翻牌（3 张）、转牌、河牌四轮下注。从底牌与公共牌中任选五张组成最强牌型。\n\n弃牌退出本手；过牌无需投入；跟注补齐差额；全下投入剩余筹码。加注金额可直接输入整数，回车确认数值，再点击加注。金额是本轮下注总额，例如已下注 20，输入 125，加注后本轮总共投入 125（再扣 105）。桌面端也可用滑块与快捷按钮。\n\n不足最小加注的全下，不会单独重新开放已行动玩家的加注权。边池分别结算，同分平分，多出的零头按庄家左侧顺序分配。\n\n同花顺 > 四条 > 葫芦 > 同花 > 顺子 > 三条 > 两对 > 一对 > 高牌。A 可组成 A2345 最小顺子。\n\n玩家离线会结束本局并返回房间，重新准备开局；房主离开则关闭房间。\n\n空格 跟注/过牌/下一手 · F 弃牌 · R 加注 · F11 全屏 · Esc 关闭指南。输入金额时不触发下注快捷键。"
@@ -233,9 +233,9 @@ func _layout_mobile() -> void:
 	var r = mobile_rect
 	for i in range(header_buttons.size()):
 		var button = header_buttons[i]
-		button.position = Vector2(r.end.x - 584 + i * 148, r.position.y + 12)
-		button.size = Vector2(140, 62)
-		button.add_theme_font_size_override("font_size", 24)
+		button.position = Vector2(r.end.x - 756 + i * 190, r.position.y + 8)
+		button.size = Vector2(182, 72)
+		button.add_theme_font_size_override("font_size", GameFonts.size(24))
 	actions_rect = Rect2(r.position.x, r.end.y - 142, r.size.x, 142)
 	var gap = 12.0
 	var unit = (r.size.x - 32 - gap * 4) / 5.4
@@ -245,38 +245,41 @@ func _layout_mobile() -> void:
 	for i in range(buttons.size()):
 		buttons[i].position = Vector2(x, actions_rect.position.y + 53)
 		buttons[i].size = Vector2(unit * weights[i], 76)
-		buttons[i].add_theme_font_size_override("font_size", 28)
+		buttons[i].add_theme_font_size_override("font_size", GameFonts.size(28))
 		x += unit * weights[i] + gap
 	amount_input.position = Vector2(x, actions_rect.position.y + 53)
 	amount_input.size = Vector2(unit * 1.6, 76)
-	amount_input.add_theme_font_size_override("font_size", 30)
+	amount_input.add_theme_font_size_override("font_size", GameFonts.size(30))
 	for i in range(2):
 		var button = next_button if i == 0 else reset_button
 		button.position = Vector2(r.end.x - 510 + i * 250, actions_rect.position.y + 53)
 		button.size = Vector2(238, 76)
-		button.add_theme_font_size_override("font_size", 26)
+		button.add_theme_font_size_override("font_size", GameFonts.size(26))
 	show_sidebar = r.size.x >= 1760
 	var table_area = Rect2(r.position.x, r.position.y + 90, r.size.x - (330 if show_sidebar else 0), actions_rect.position.y - r.position.y - 102)
 	var board_scale = minf(table_area.size.x / 1080, table_area.size.y / 675)
 	board_transform = Transform2D(0, Vector2.ONE * board_scale, 0, table_area.get_center() - Vector2(560, 442.5) * board_scale)
 	status_label.position = board_transform * Vector2(282, 495)
-	status_label.size = Vector2(556, 36)
+	status_label.size = Vector2(730, 54)
+	status_label.position = board_transform * Vector2(195, 485)
+	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	status_label.scale = Vector2.ONE * board_scale
-	status_label.add_theme_font_size_override("font_size", 23)
+	status_label.add_theme_font_size_override("font_size", GameFonts.size(23))
 	result_panel.position = board_transform * Vector2(185, 282)
 	result_panel.scale = Vector2.ONE * board_scale
+	result_label.add_theme_font_size_override("font_size", GameFonts.size(17))
 	var sidebar_scale = minf(1, table_area.size.y / 653)
 	sidebar_transform = Transform2D(0, Vector2.ONE * sidebar_scale, 0, Vector2(r.end.x - 294 * sidebar_scale, table_area.position.y) - Vector2(1112, 113) * sidebar_scale)
 	rules_panel.size = Vector2(minf(1100, r.size.x - 32), minf(760, r.size.y - 32))
 	rules_panel.position = r.get_center() - rules_panel.size / 2
 	rules_heading.position = Vector2(30, 24)
-	rules_heading.add_theme_font_size_override("font_size", 30)
+	rules_heading.add_theme_font_size_override("font_size", GameFonts.size(30))
 	rules_body.position = Vector2(30, 85)
 	rules_body.size = rules_panel.size - Vector2(60, 195)
-	rules_body.add_theme_font_size_override("normal_font_size", 26)
+	rules_body.add_theme_font_size_override("normal_font_size", GameFonts.size(26))
 	rules_close.size = Vector2(260, 72)
 	rules_close.position = Vector2((rules_panel.size.x - 260) / 2, rules_panel.size.y - 92)
-	rules_close.add_theme_font_size_override("font_size", 26)
+	rules_close.add_theme_font_size_override("font_size", GameFonts.size(26))
 	queue_redraw()
 
 func _ask_reset() -> void:
@@ -292,7 +295,7 @@ func _ask_reset() -> void:
 		if not dialog.visible:
 			dialog.queue_free())
 	add_child(dialog)
-	dialog.popup_centered(Vector2i(450, 160))
+	_present_confirmation(dialog)
 
 func _leave_game() -> void:
 	if _modal_open():
@@ -310,7 +313,21 @@ func _leave_game() -> void:
 		if not dialog.visible:
 			dialog.queue_free())
 	add_child(dialog)
-	dialog.popup_centered(Vector2i(450, 160))
+	_present_confirmation(dialog)
+
+func _present_confirmation(dialog: ConfirmationDialog) -> void:
+	if touch_layout:
+		dialog.theme = theme
+		dialog.add_theme_font_override("title_font", ui_font)
+		dialog.add_theme_font_size_override("title_font_size", GameFonts.size(24))
+		dialog.get_label().add_theme_font_size_override("font_size", GameFonts.size(24))
+		dialog.get_label().autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		for button in [dialog.get_ok_button(), dialog.get_cancel_button()]:
+			button.add_theme_font_size_override("font_size", GameFonts.size(24))
+			button.custom_minimum_size = Vector2(220, 72)
+		dialog.popup_centered(Vector2i(800, 260))
+	else:
+		dialog.popup_centered(Vector2i(450, 160))
 
 func _modal_open() -> bool:
 	if rules_panel.visible:
@@ -547,6 +564,7 @@ func _play_sound(frequency: float) -> void:
 	audio_player.play()
 
 func _text(value: String, point: Vector2, font_size: int = 18, color: Color = INK, center: bool = false, font: Font = null) -> void:
+	font_size = GameFonts.size(font_size)
 	var chosen = ui_font if font == null else font
 	if center:
 		point.x -= chosen.get_string_size(value, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x / 2
@@ -594,6 +612,10 @@ func _card(card: int, rect: Rect2, face_up: bool = true, dimmed: bool = false) -
 	var color = Color("c05250") if suit == 1 or suit == 3 else Color("1c3a3a")
 	var small = rect.size.x < 70
 	var font_size = 18 if small else 25
+	if touch_layout:
+		_text(PokerRules.rank_text(card), anim_rect.position + Vector2(8, GameFonts.size(font_size) + 3), font_size, color, false, card_font)
+		_text(PokerRules.SUITS[suit], anim_rect.get_center() + Vector2(0, 28), 38 if not small else 23, color, true, symbol_font)
+		return
 	_text(PokerRules.rank_text(card), anim_rect.position + Vector2(9, font_size + 4), font_size, color, false, card_font)
 	_text(PokerRules.SUITS[suit], anim_rect.position + Vector2(11, font_size + 23), 15 if small else 19, color, false, symbol_font)
 	_text(PokerRules.SUITS[suit], anim_rect.get_center() + Vector2(4, 17 if not small else 11), 38 if not small else 23, color, true, symbol_font)
@@ -633,7 +655,6 @@ func _draw_mobile() -> void:
 	var r = mobile_rect
 	_chip(r.position + Vector2(24, 41), GOLD, 19)
 	_text("夜色牌局", r.position + Vector2(55, 51), 32)
-	_text("局域网 · %d 人桌" % table.players.size() if online else "单机练习", r.position + Vector2(234, 50), 23, GREEN)
 	draw_line(Vector2(r.position.x, r.position.y + 85), Vector2(r.end.x, r.position.y + 85), Color("294047"))
 	draw_set_transform_matrix(board_transform)
 	_draw_felt()
@@ -663,7 +684,8 @@ func _draw_felt() -> void:
 		var angle = float(i) * TAU / 128
 		points.append(Vector2(560, 407) + Vector2(cos(angle) * 440, sin(angle) * 201))
 	draw_polyline(points, Color("6a8c6e"), 1.0, true)
-	_text("N I G H T F A L L   P O K E R   C L U B", Vector2(560, 537), 11, Color("62957f"), true)
+	if not touch_layout:
+		_text("N I G H T F A L L   P O K E R   C L U B", Vector2(560, 537), 11, Color("62957f"), true)
 
 func _draw_board() -> void:
 	var pot_amount = table.last_pot if table.finished else table.pot()
@@ -671,15 +693,15 @@ func _draw_board() -> void:
 		_box(Rect2(427, 279, 266, 55), Color("19413b"), Color("55826b"), 28)
 		_chip(Vector2(454, 305), GOLD, 11)
 		_text("底池", Vector2(477, 310), 16, Color("b2cfb8"))
-		_text(str(pot_amount), Vector2(570, 313), 27, INK, true)
+		_text(str(pot_amount), Vector2(612 if touch_layout else 570, 319 if touch_layout else 313), 27, INK, true)
 	for i in range(5):
 		_card(table.board[i] if i < table.board.size() else -1, Rect2(313 + i * 102, 354, 88, 124))
 	if table.board.is_empty():
 		_text("公共牌即将发出", Vector2(560, 394), 16, Color("79a191"), true)
 	for i in range(4):
 		var color = GOLD if table.street == i else Color("557d71")
-		draw_circle(Vector2(446 + i * 60, 342), 2.0, color)
-		_text(PokerTable.STREETS[i], Vector2(469 + i * 60, 347), 13, color, true)
+		draw_circle(Vector2((398 + i * 95) if touch_layout else (446 + i * 60), 342), 2.0, color)
+		_text(PokerTable.STREETS[i], Vector2((430 + i * 95) if touch_layout else (469 + i * 60), 347), 13, color, true)
 
 func _draw_seat(seat: int) -> void:
 	var p = table.players[seat]
@@ -691,6 +713,10 @@ func _draw_seat(seat: int) -> void:
 	var rect = Rect2(SEATS[slot], Vector2(300, 75) if seat == 0 else Vector2(210, 80))
 	if slot == 2:
 		rect.size = Vector2(252, 78)
+	if touch_layout:
+		rect.size.y = 100 if seat != 0 else 88
+		if seat != 0:
+			rect.size.x = 246
 	var active = table.actor == seat
 	var border = GOLD if active else (GREEN if seat in table.winning_seats and table.finished else Color("355057"))
 	if active:
@@ -700,14 +726,14 @@ func _draw_seat(seat: int) -> void:
 	draw_circle(avatar, 18, [Color("417f6c"), Color("435c78"), Color("77597a"), Color("8b6e47")][seat])
 	_text("你" if seat == 0 else p.name.left(1), avatar + Vector2(0, 7), 17, INK, true)
 	var displayed_name: String = p.name
-	while ui_font.get_string_size(displayed_name, HORIZONTAL_ALIGNMENT_LEFT, -1, 17).x > rect.size.x - 105:
+	while ui_font.get_string_size(displayed_name, HORIZONTAL_ALIGNMENT_LEFT, -1, GameFonts.size(17)).x > rect.size.x - 105:
 		displayed_name = displayed_name.left(displayed_name.length() - 2) + "…"
 	_text(displayed_name, rect.position + Vector2(61, 29), 17, MUTED if p.folded else INK)
-	_text("%s 筹码" % p.stack, rect.position + Vector2(61, 53), 18, GOLD if seat == 0 else INK)
+	_text("%s 筹码" % p.stack, rect.position + Vector2(61, 63 if touch_layout else 53), 18, GOLD if seat == 0 else INK)
 	if seat != 0:
-		_text(p.action, rect.position + Vector2(15, 72), 13, GOLD if active else MUTED)
+		_text(p.action, rect.position + Vector2(15, 91 if touch_layout else 72), 13, GOLD if active else MUTED)
 	else:
-		_text(p.action, Vector2(560, 777), 13, MUTED, true)
+		_text(p.action, Vector2(560, 768 if touch_layout else 777), 13, MUTED, true)
 	if seat == table.dealer:
 		draw_circle(rect.position + Vector2(-15, 13), 13, Color("efe9d9"))
 		_text("D", rect.position + Vector2(-15, 18), 14, Color("244540"), true, card_font)
@@ -718,10 +744,10 @@ func _draw_seat(seat: int) -> void:
 		origin = Vector2(460, 544)
 		card_size = Vector2(92, 128)
 	elif slot == 2:
-		origin = Vector2(499, 196)
+		origin = Vector2(499, 214 if touch_layout else 196)
 		card_size = Vector2(55, 77)
 	else:
-		origin = rect.position + Vector2(39, 94)
+		origin = rect.position + Vector2(39, 112 if touch_layout else 94)
 		card_size = Vector2(55, 77)
 	for i in range(p.hole.size()):
 		_card(p.hole[i], Rect2(origin + Vector2(i * (card_size.x + 12), 0), card_size), reveal, p.folded)
@@ -735,10 +761,13 @@ func _draw_seat(seat: int) -> void:
 		_text(str(p.street_bet), pos + Vector2(0, 30), 14, Color("d1deca"), true)
 	if seat == table.small_blind_seat or seat == table.big_blind_seat:
 		var tag = "SB" if seat == table.small_blind_seat else "BB"
-		_box(Rect2(rect.end.x - 35, rect.position.y + 7, 28, 20), Color("29474a"), Color.TRANSPARENT, 5)
-		_text(tag, Vector2(rect.end.x - 21, rect.position.y + 22), 11, GOLD, true)
+		_box(Rect2(rect.end.x - (45 if touch_layout else 35), rect.position.y + 7, 38 if touch_layout else 28, 28 if touch_layout else 20), Color("29474a"), Color.TRANSPARENT, 5)
+		_text(tag, Vector2(rect.end.x - (26 if touch_layout else 21), rect.position.y + (28 if touch_layout else 22)), 11, GOLD, true)
 
 func _draw_sidebar() -> void:
+	if touch_layout:
+		_draw_mobile_sidebar()
+		return
 	_box(Rect2(1112, 113, 294, 653), Color("11262e"), Color("2a4048"), 18)
 	_text("牌局概览", Vector2(1136, 149), 20)
 	_box(Rect2(1135, 168, 246, 91), Color("173038"), Color.TRANSPARENT, 12)
@@ -770,12 +799,41 @@ func _draw_sidebar() -> void:
 		draw_circle(Vector2(1140, baseline - 5), 2, color)
 		# Keep the history column inside its bounds, including side-pot names.
 		var display = line
-		while ui_font.get_string_size(display, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x > 231:
+		while ui_font.get_string_size(display, HORIZONTAL_ALIGNMENT_LEFT, -1, GameFonts.size(13)).x > 231:
 			display = display.left(display.length() - 2) + "…"
 		_text(display, Vector2(1151, baseline), 13, color)
 	_box(Rect2(1135, 685, 247, 58), Color("173038"), Color.TRANSPARENT, 10)
 	_text("任意五张，组成你的最佳牌型。", Vector2(1148, 709), 13, MUTED)
 	_text("沉稳下注，也给运气一点空间。", Vector2(1148, 730), 13, MUTED)
+
+func _draw_mobile_sidebar() -> void:
+	_box(Rect2(1112, 113, 294, 653), Color("11262e"), Color("2a4048"), 18)
+	_text("牌局概览", Vector2(1136, 151), 20)
+	_text("第 %d 手 · 盲注 10 / 20" % table.hand_number, Vector2(1136, 193), 13, GOLD)
+	_text("你的牌力", Vector2(1136, 240), 15, MUTED)
+	var hand_name = "等待公共牌"
+	if table.players[0].hole.size() != 2:
+		hand_name = "已出局 · 观战"
+	elif table.board.size() >= 3:
+		hand_name = PokerRules.evaluate(table.players[0].hole + table.board).name
+	else:
+		var a = table.players[0].hole[0]
+		var b = table.players[0].hole[1]
+		hand_name = "口袋对子" if PokerRules.rank_of(a) == PokerRules.rank_of(b) else ("同花底牌" if PokerRules.suit_of(a) == PokerRules.suit_of(b) else "非同花底牌")
+	_text(hand_name, Vector2(1136, 287), 23, GREEN)
+	_text("筹码变化", Vector2(1136, 332), 14, MUTED)
+	var net = table.players[0].stack - PokerTable.START_STACK
+	_text(("+" if net >= 0 else "") + str(net), Vector2(1365, 332), 18, GREEN if net >= 0 else Color("d68f80"), true)
+	draw_line(Vector2(1136, 354), Vector2(1381, 354), Color("2c444a"))
+	_text("牌桌动态", Vector2(1136, 396), 18)
+	var start = maxi(0, table.history.size() - 6)
+	for i in range(start, table.history.size()):
+		var display: String = table.history[i]
+		while ui_font.get_string_size(display, HORIZONTAL_ALIGNMENT_LEFT, -1, GameFonts.size(13)).x > 231:
+			display = display.left(display.length() - 2) + "…"
+		_text(display, Vector2(1151, 436 + (i - start) * 43), 13, GOLD if i == table.history.size() - 1 else MUTED)
+	_text("任选五张组成最佳牌型", Vector2(1136, 714), 13, MUTED)
+	_text("沉稳下注，轻松玩牌。", Vector2(1136, 746), 13, MUTED)
 
 func _draw_actions() -> void:
 	_box(Rect2(34, 790, 1372, 82), Color("122930"), Color("30444a"), 16)
